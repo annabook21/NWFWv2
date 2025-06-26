@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Firewall Architecture Simulator</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="../node_modules/fabric/dist/fabric.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>🔥 Network Firewall Architecture Simulator</h1>
+                <p>Interactive AWS Network Firewall Deployment Designer</p>
+            </div>
+        </header>
+
+        <!-- Main Container -->
+        <div class="main-container">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="panel">
+                    <h3>📋 Deployment Models</h3>
+                    <div class="button-group">
+                        <button class="model-btn" data-model="centralized">Centralized</button>
+                        <button class="model-btn" data-model="decentralized">Decentralized</button>
+                        <button class="model-btn" data-model="combined">Combined</button>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h3>🏗️ Components</h3>
+                    <div class="component-palette">
+                        <div class="component-item" draggable="true" data-type="vpc">
+                            <div class="component-icon vpc-icon">VPC</div>
+                            <span>VPC</span>
+                        </div>
+                        <div class="component-item" draggable="true" data-type="firewall">
+                            <div class="component-icon firewall-icon">🔥</div>
+                            <span>Firewall</span>
+                        </div>
+                        <div class="component-item" draggable="true" data-type="subnet">
+                            <div class="component-icon subnet-icon">SUB</div>
+                            <span>Subnet</span>
+                        </div>
+                        <div class="component-item" draggable="true" data-type="igw">
+                            <div class="component-icon igw-icon">IGW</div>
+                            <span>Gateway</span>
+                        </div>
+                        <div class="component-item" draggable="true" data-type="tgw">
+                            <div class="component-icon tgw-icon">TGW</div>
+                            <span>Transit GW</span>
+                        </div>
+                        <div class="component-item" draggable="true" data-type="nat">
+                            <div class="component-icon nat-icon">NAT</div>
+                            <span>NAT Gateway</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h3>⚙️ Configuration</h3>
+                    <div class="config-section">
+                        <label>Availability Zones:</label>
+                        <input type="number" id="azCount" min="1" max="6" value="3">
+                        
+                        <label>Spoke VPCs:</label>
+                        <input type="number" id="spokeCount" min="0" max="10" value="2">
+                        
+                        <label>
+                            <input type="checkbox" id="privateSubnets"> Include Private Subnets
+                        </label>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h3>📊 Route Information</h3>
+                    <div id="routeInfo" class="route-info">
+                        <p>Select components to see routing details</p>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Canvas Area -->
+            <main class="canvas-container">
+                <div class="canvas-toolbar">
+                    <button id="clearCanvas" class="toolbar-btn">🗑️ Clear</button>
+                    <button id="saveCanvas" class="toolbar-btn">💾 Save</button>
+                    <button id="exportCanvas" class="toolbar-btn">📤 Export</button>
+                    <button id="zoomIn" class="toolbar-btn">🔍+</button>
+                    <button id="zoomOut" class="toolbar-btn">🔍-</button>
+                    <button id="resetZoom" class="toolbar-btn">⚡ Reset View</button>
+                </div>
+                
+                <div class="canvas-wrapper">
+                    <canvas id="canvas" width="1000" height="700"></canvas>
+                </div>
+
+                <!-- Connection Lines Panel -->
+                <div class="connections-panel">
+                    <h4>🔗 Active Connections</h4>
+                    <div id="connectionsList" class="connections-list">
+                        <p>No connections established</p>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Status Bar -->
+        <footer class="status-bar">
+            <span id="statusText">Ready - Drag components to canvas or select a deployment model</span>
+            <span id="coordinates">X: 0, Y: 0</span>
+        </footer>
+
+        <!-- Modal for About -->
+        <div id="aboutModal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>About Network Firewall Simulator</h2>
+                <p>Version 2.0.0 - Interactive AWS Network Firewall Architecture Designer</p>
+                <p>Sequel to the original Network Firewall Route Planner</p>
+                <br>
+                <p><strong>Created by Anna Booker © 2024</strong></p>
+                <p>GitHub: <a href="https://github.com/annabook21" target="_blank">annabook21</a></p>
+                <p>LinkedIn: <a href="https://linkedin.com/in/annadbooker" target="_blank">annadbooker</a></p>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>Loading deployment model...</p>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html> 

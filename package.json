@@ -1,0 +1,46 @@
+{
+  "name": "network-firewall-simulator",
+  "version": "2.0.0",
+  "description": "Interactive Network Firewall Architecture Simulator - Sequel to Network Firewall Route Planner",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "build-win": "electron-builder --win",
+    "build-mac": "electron-builder --mac",
+    "build-linux": "electron-builder --linux"
+  },
+  "author": "Anna Booker",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4"
+  },
+  "dependencies": {
+    "fabric": "^5.3.0"
+  },
+  "build": {
+    "appId": "com.annabook21.network-firewall-simulator",
+    "productName": "Network Firewall Simulator",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "icon": "assets/icon.ico"
+    },
+    "linux": {
+      "icon": "assets/icon.png"
+    }
+  }
+} 

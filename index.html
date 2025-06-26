@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Firewall Route Planner</title>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/98.css">
+    <link rel="icon" href="win95.png" type="image/png"> <!-- Add this line to reference the emoticon for the tab -->
+    <style>
+        body {
+            background-color: #008080; /* Green background color */
+        }
+
+        .creator-info {
+            max-width: 600px;
+            margin: 250px auto; /* Increased margin to add more space */
+            border: 2px solid #000000; /* Windows 95 theme border color */
+            border-radius: 5px;
+            padding: 20px;
+            background-color: #c0c0c0; /* Windows 95 theme container background color */
+            box-shadow: 3px 3px 5px #888888; /* Windows 95 theme shadow */
+        }
+    </style>
+</head>
+<body>
+    <div class="window">
+        <div class="title-bar">
+            <div class="title-bar-text">Network Firewall Route Planner</div>
+            <div class="title-bar-controls">
+                <button aria-label="Minimize"></button>
+                <button aria-label="Maximize"></button>
+                <button aria-label="Close"></button>
+            </div>
+        </div>
+        <div class="window-body">
+            <label for="deployment">Choose a deployment model:</label><br>
+            <select id="deployment" name="deployment" onchange="toggleSpokeVPCInput()">
+                <option value="centralized">Centralized Deployment</option>
+                <option value="decentralized" selected>Decentralized Deployment</option>
+                <option value="combined">Combined Deployment</option>
+            </select><br><br>
+
+            <div id="spoke_vpc_input" style="display: none;">
+                <label for="spoke_vpc_count">Number of Spoke VPCs:</label><br>
+                <input type="number" id="spoke_vpc_count" name="spoke_vpc_count" min="1" max="26" value="3"><br><br>
+            </div>
+            <label for="az_count">Number of Availability Zones:</label><br>
+            <input type="number" id="az_count" name="az_count" min="1" max="26" value="3"><br><br>
+            <input type="checkbox" id="private_subnets" name="private_subnets">
+            <label for="private_subnets">Private Subnets Exist?</label><br><br>
+            <input type="radio" id="nat_gateway" name="private_method" value="nat_gateway" disabled>
+            <label for="nat_gateway">Route through NAT Gateway, then Firewall</label><br>
+            <input type="radio" id="firewall_endpoint" name="private_method" value="firewall_endpoint" disabled>
+            <label for="firewall_endpoint">Route through Firewall, then NAT Gateway</label><br><br>
+            <button onclick="submitForm()">Submit</button>
+
+
+            <div id="output"></div>
+        </div>
+    </div>
+
+    <script>
+       function generateRouteTable(deployment, azCount, privateSubnetsExist, privateMethod, spokeVPCCount) {
+    // Generate route table structure with appropriate labels based on deployment
+    let output = "<table class='table'>";
+    output += "<tr><th>Route Table Type</th><th>Route</th>";
+    if (deployment === "decentralized") {
+        output += "<th>Availability Zone</th>";
+    }
+    output += "</tr>";
+
+    const azChars = ['a', 'b', 'c']; // AZ characters for labeling (extend as needed)
+
+    if (deployment === "centralized" || deployment === "combined") {
+        output += `<tr><td>Firewall Route Table</td><td>Route to tgw-id</td></tr>`;
+        for (let i = 0; i < azCount; i++) {
+            output += `<tr><td>Inspection VPC Route Table in AZ ${azChars[i]}</td><td>Route to Firewall (VPCE - AZ ${azChars[i]})</td></tr>`;
+            if (privateSubnetsExist) {
+                output += `<tr><td>NAT Gateway Route Table in AZ ${azChars[i]}</td><td>Route to NAT Gateway</td></tr>`;
+            }
+        }
+        // Generate Spoke VPC routes
+        const spokeVPCChars = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']; // Characters for labeling Spoke VPCs
+        for (let i = 0; i < spokeVPCCount; i++) {
+            output += `<tr><td>Spoke VPC ${spokeVPCChars[i]} Route Table</td><td>Route to tgw-id</td></tr>`;
+        }
+    } else if (deployment === "decentralized") {
+        for (let i = 0; i < azCount; i++) {
+            output += `<tr><td>Protected Subnet Route Table</td><td>Route to Firewall (VPCE)</td><td>${azChars[i]}</td></tr>`;
+            output += `<tr><td>Firewall Subnet Route Table</td><td>Route to IGW</td><td>${azChars[(i + 2) % azCount]}</td></tr>`;
+            if (privateSubnetsExist) {
+                if (privateMethod === "nat_gateway") {
+                    output += `<tr><td>NAT Gateway Route Table in AZ ${azChars[(i + 3) % azCount]}</td><td>Route to NAT Gateway</td></tr>`;
+                } else if (privateMethod === "firewall_endpoint") {
+                    output += `<tr><td>Firewall Endpoint Route Table in AZ ${azChars[(i + 3) % azCount]}</td><td>Route to Firewall Endpoint</td></tr>`;
+                }
+            }
+        }
+        // Add IGW Ingress Route Table
+        if (azCount > 0) {
+            for (let i = 0; i < azCount; i++) {
+                output += `<tr><td>IGW Ingress Route Table</td><td>Route to Firewall (VPCE - AZ ${azChars[i]}) / AZ ${azChars[i]} subnet CIDR</td></tr>`;
+            }
+        }
+    }
+    output += "</table>";
+    return output;
+}
+
+
+        function submitForm() {
+            var deployment = document.getElementById("deployment").value;
+            var azCount = parseInt(document.getElementById("az_count").value);
+            var privateSubnetsExist = document.getElementById("private_subnets").checked;
+            var privateMethod = "";
+            if (document.getElementById("nat_gateway").checked) {
+                privateMethod = "nat_gateway";
+            } else if (document.getElementById("firewall_endpoint").checked) {
+                privateMethod = "firewall_endpoint";
+            }
+            var spokeVPCCount = parseInt(document.getElementById("spoke_vpc_count").value);
+            var outputDiv = document.getElementById("output");
+
+            var output = generateRouteTable(deployment, azCount, privateSubnetsExist, privateMethod, spokeVPCCount);
+            outputDiv.innerHTML = output;
+        }
+
+        function toggleSpokeVPCInput() {
+            var deployment = document.getElementById("deployment").value;
+            var spokeVPCInput = document.getElementById("spoke_vpc_input");
+            if (deployment === "centralized" || deployment === "combined") {
+                spokeVPCInput.style.display = "block";
+            } else {
+                spokeVPCInput.style.display = "none";
+            }
+        }
+
+        document.getElementById("private_subnets").addEventListener("change", function() {
+            var checkboxes = document.querySelectorAll('input[name="private_method"]');
+            checkboxes.forEach(function(checkbox) {
+                checkbox.disabled = !this.checked;
+            }, this);
+        });
+    </script>
+	
+	<div class="creator-info">
+        <p>Created by Anna Booker © 2024. All rights reserved.</p>
+        <p>GitHub: <a href="https://github.com/annabook21?tab=repositories" style="color: #0000ff;">annabook21</a></p>
+        <p>LinkedIn: <a href="https://linkedin.com/in/annadbooker" style="color: #0000ff;">annadbooker</a></p>
+    </div>
+	
+	
+</body>
+</html>
+
