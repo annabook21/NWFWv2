@@ -24,12 +24,8 @@ function createWindow() {
   // Show window when ready to prevent visual flash
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-  });
-
-  // Open DevTools in development
-  if (process.argv.includes('--dev')) {
     mainWindow.webContents.openDevTools();
-  }
+  });
 
   // Handle window closed
   mainWindow.on('closed', () => {
