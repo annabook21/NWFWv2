@@ -798,8 +798,8 @@ function buildCombinedModel() {
         <table class="route-table">
             <thead><tr><th>Destination</th><th>Target</th></tr></thead>
             <tbody>
-                <tr><td>0.0.0.0/0</td><td>TGW (tgw-0def5678)</td></tr>
-                <tr><td>10.2.0.0/16</td><td>local</td></tr>
+                <tr><td>0.0.0.0/0</td><td>VPC Route Table</td></tr>
+                <tr><td>10.0.0.0/16</td><td>local</td></tr>
             </tbody>
         </table>
     `;
@@ -1394,8 +1394,8 @@ function buildCentralizedDedicatedModel() {
         <table class="route-table">
             <thead><tr><th>Destination</th><th>Target</th></tr></thead>
             <tbody>
-                <tr><td>0.0.0.0/0</td><td>TGW (tgw-0def5678)</td></tr>
-                <tr><td>10.2.0.0/16</td><td>local</td></tr>
+                <tr><td>0.0.0.0/0</td><td>VPC Route Table</td></tr>
+                <tr><td>10.0.0.0/16</td><td>local</td></tr>
             </tbody>
         </table>
     `;
