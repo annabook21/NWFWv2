@@ -295,6 +295,1096 @@ function buildCentralizedModel() {
     addConnection([0, 1, 6], [18, 1.5, -10], 0x2196f3); // TGW to Spoke B
 }
 
+function buildDecentralizedModel() {
+    clearScene();
+
+    // --- Helper: House (VPC) ---
+    function createHouseVPC({x, y, z, color, label, vpcRouteTable, rooms}) {
+        // House base
+        const base = new THREE.Mesh(
+            new THREE.BoxGeometry(8, 3, 6),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5 })
+        );
+        base.position.set(x, y + 1.5, z);
+
+        // Roof (triangular prism)
+        const roofGeo = new THREE.ConeGeometry(5, 2, 4);
+        const roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({ color: 0x8d5524 }));
+        roof.position.set(x, y + 4, z);
+        roof.rotation.y = Math.PI / 4;
+
+        // Door
+        const door = new THREE.Mesh(
+            new THREE.BoxGeometry(1, 1.5, 0.2),
+            new THREE.MeshStandardMaterial({ color: 0xdeb887 })
+        );
+        door.position.set(x, y + 0.75, z + 3.1);
+
+        // Windows
+        const window1 = new THREE.Mesh(
+            new THREE.BoxGeometry(0.8, 0.8, 0.1),
+            new THREE.MeshStandardMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.7 })
+        );
+        window1.position.set(x - 2, y + 2, z + 3.05);
+        const window2 = window1.clone();
+        window2.position.set(x + 2, y + 2, z + 3.05);
+
+        // Label
+        const vpcLabel = createLabel(label, "#fff");
+        vpcLabel.position.set(x, y + 6, z);
+
+        // Group
+        const group = new THREE.Group();
+        group.add(base, roof, door, window1, window2, vpcLabel);
+
+        // --- Interactivity: click house to show VPC route table
+        group.cursor = "pointer";
+        group.onClick = () => showRouteTablePanel(group, vpcRouteTable, label);
+
+        // --- Rooms (subnets) ---
+        rooms.forEach((room, idx) => {
+            // Room as a box inside the house
+            const roomBox = new THREE.Mesh(
+                new THREE.BoxGeometry(2.5, 1.5, 2.5),
+                new THREE.MeshStandardMaterial({ color: room.color, opacity: 0.7, transparent: true })
+            );
+            // Arrange rooms in a grid inside the house
+            const rx = x + (idx === 0 ? -2 : 2);
+            const rz = z;
+            roomBox.position.set(rx, y + 1.5, rz);
+
+            // Room label
+            const roomLabel = createLabel(room.label, "#222");
+            roomLabel.position.set(rx, y + 3.2, rz);
+
+            // Interactivity: click room to show subnet route table
+            roomBox.cursor = "pointer";
+            roomBox.onClick = () => showRouteTablePanel(roomBox, room.subnetRouteTable, room.label);
+
+            group.add(roomBox, roomLabel);
+
+            // --- Firewall endpoint (shield) ---
+            if (room.hasFirewall) {
+                // Shield: stylized 3D object
+                const shield = new THREE.Group();
+                const shieldBody = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.5, 1, 1.5, 32, 1, false, 0, Math.PI),
+                    new THREE.MeshStandardMaterial({ color: 0xf44336, metalness: 0.6, roughness: 0.2 })
+                );
+                shieldBody.rotation.z = Math.PI;
+                shieldBody.position.y = 0.75;
+                const shieldFace = new THREE.Mesh(
+                    new THREE.CircleGeometry(0.7, 32),
+                    new THREE.MeshStandardMaterial({ color: 0xffe082, metalness: 0.8, roughness: 0.1 })
+                );
+                shieldFace.position.z = 0.01;
+                shieldFace.position.y = 1.1;
+                shield.add(shieldBody, shieldFace);
+                shield.position.set(rx, y + 2.2, rz);
+                shield.userData = { type: "firewall", label: "Firewall Endpoint", routeTable: room.firewallRouteTable };
+
+                // Shield label
+                const shieldLabel = createLabel("Firewall", "#f44336");
+                shieldLabel.position.set(rx, y + 3.7, rz);
+
+                // Interactivity: click shield to show firewall route table
+                shield.cursor = "pointer";
+                shield.onClick = () => showRouteTablePanel(shield, room.firewallRouteTable, "Firewall Endpoint");
+
+                group.add(shield, shieldLabel);
+            }
+        });
+
+        scene.add(group);
+        return group;
+    }
+
+    // --- Route Table HTML for Decentralized Model ---
+    const protectedVpcRouteTable = `
+        <b>Protected VPC Route Table</b>
+        <ul>
+            <li>Local VPC CIDR → Local</li>
+            <li>Protected Subnet CIDR → Firewall Endpoint</li>
+        </ul>
+    `;
+    const protectedSubnetRouteTable = `
+        <b>Protected Subnet Route Table</b>
+        <ul>
+            <li>0.0.0.0/0 → Firewall Endpoint (vpce-id)</li>
+            <li>Local VPC CIDR → Local</li>
+        </ul>
+    `;
+    const firewallSubnetRouteTable = `
+        <b>Firewall Subnet Route Table</b>
+        <ul>
+            <li>0.0.0.0/0 → Internet Gateway (igw-id)</li>
+            <li>Protected Subnet CIDR → Local</li>
+        </ul>
+    `;
+    const firewallEndpointTable = `
+        <b>Firewall Endpoint</b>
+        <ul>
+            <li>Stateful/Stateless Rules</li>
+            <li>HOME_NET: Protected Subnet CIDR</li>
+            <li>Inspect inbound/outbound traffic</li>
+        </ul>
+    `;
+    const igwRouteTable = `
+        <b>IGW Ingress Route Table</b>
+        <ul>
+            <li>Protected Subnet CIDR → Firewall Endpoint</li>
+            <li>Forces symmetric routing</li>
+        </ul>
+    `;
+
+    // --- Decentralized Model Layout ---
+    // Internet/Cloud at the top
+    const internet = new THREE.Mesh(
+        new THREE.SphereGeometry(2, 32, 32),
+        new THREE.MeshStandardMaterial({ color: 0x90caf9, transparent: true, opacity: 0.8 })
+    );
+    internet.position.set(0, 8, 0);
+    scene.add(internet);
+    const internetLabel = createLabel("Internet", "#2196f3");
+    internetLabel.position.set(0, 11, 0);
+    scene.add(internetLabel);
+
+    // Protected VPCs (each with their own firewall)
+    const vpcPositions = [
+        { x: -15, y: 0, z: -8, color: 0x4caf50, label: "Protected VPC A" },
+        { x: 15, y: 0, z: -8, color: 0x2196f3, label: "Protected VPC B" },
+        { x: -15, y: 0, z: 8, color: 0xff9800, label: "Protected VPC C" },
+        { x: 15, y: 0, z: 8, color: 0x9c27b0, label: "Protected VPC D" }
+    ];
+
+    vpcPositions.forEach((vpc, idx) => {
+        createHouseVPC({
+            x: vpc.x, y: vpc.y, z: vpc.z,
+            color: vpc.color,
+            label: vpc.label,
+            vpcRouteTable: protectedVpcRouteTable,
+            rooms: [
+                { 
+                    label: "Protected Subnet", 
+                    color: 0xfff9c4, 
+                    hasFirewall: false, 
+                    subnetRouteTable: protectedSubnetRouteTable 
+                },
+                { 
+                    label: "Firewall Subnet", 
+                    color: 0xffcdd2, 
+                    hasFirewall: true, 
+                    subnetRouteTable: firewallSubnetRouteTable, 
+                    firewallRouteTable: firewallEndpointTable 
+                }
+            ]
+        });
+
+        // IGW for each VPC
+        const igw = new THREE.Mesh(
+            new THREE.SphereGeometry(0.8, 32, 32),
+            new THREE.MeshStandardMaterial({ color: 0x90caf9 })
+        );
+        igw.position.set(vpc.x, 2, vpc.z);
+        igw.cursor = "pointer";
+        igw.onClick = () => showRouteTablePanel(igw, igwRouteTable, "Internet Gateway");
+        scene.add(igw);
+
+        const igwLabel = createLabel("IGW", "#2196f3");
+        igwLabel.position.set(vpc.x, 4, vpc.z);
+        scene.add(igwLabel);
+
+        // Connections: Internet to IGW to VPC
+        addConnection([0, 8, 0], [vpc.x, 2, vpc.z], 0x2196f3); // Internet to IGW
+        addConnection([vpc.x, 2, vpc.z], [vpc.x, 1.5, vpc.z], 0x4caf50); // IGW to VPC
+    });
+
+    // Add title
+    const title = createLabel("Decentralized: Each VPC has its own firewall", "#fff");
+    title.position.set(0, -8, 0);
+    scene.add(title);
+}
+
+function buildCombinedModel() {
+    clearScene();
+
+    // --- Helper: House (VPC) ---
+    function createHouseVPC({x, y, z, color, label, vpcRouteTable, rooms}) {
+        // House base
+        const base = new THREE.Mesh(
+            new THREE.BoxGeometry(8, 3, 6),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5 })
+        );
+        base.position.set(x, y + 1.5, z);
+
+        // Roof (triangular prism)
+        const roofGeo = new THREE.ConeGeometry(5, 2, 4);
+        const roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({ color: 0x8d5524 }));
+        roof.position.set(x, y + 4, z);
+        roof.rotation.y = Math.PI / 4;
+
+        // Door
+        const door = new THREE.Mesh(
+            new THREE.BoxGeometry(1, 1.5, 0.2),
+            new THREE.MeshStandardMaterial({ color: 0xdeb887 })
+        );
+        door.position.set(x, y + 0.75, z + 3.1);
+
+        // Windows
+        const window1 = new THREE.Mesh(
+            new THREE.BoxGeometry(0.8, 0.8, 0.1),
+            new THREE.MeshStandardMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.7 })
+        );
+        window1.position.set(x - 2, y + 2, z + 3.05);
+        const window2 = window1.clone();
+        window2.position.set(x + 2, y + 2, z + 3.05);
+
+        // Label
+        const vpcLabel = createLabel(label, "#fff");
+        vpcLabel.position.set(x, y + 6, z);
+
+        // Group
+        const group = new THREE.Group();
+        group.add(base, roof, door, window1, window2, vpcLabel);
+
+        // --- Interactivity: click house to show VPC route table
+        group.cursor = "pointer";
+        group.onClick = () => showRouteTablePanel(group, vpcRouteTable, label);
+
+        // --- Rooms (subnets) ---
+        rooms.forEach((room, idx) => {
+            // Room as a box inside the house
+            const roomBox = new THREE.Mesh(
+                new THREE.BoxGeometry(2.5, 1.5, 2.5),
+                new THREE.MeshStandardMaterial({ color: room.color, opacity: 0.7, transparent: true })
+            );
+            // Arrange rooms in a grid inside the house
+            const rx = x + (idx === 0 ? -2 : 2);
+            const rz = z;
+            roomBox.position.set(rx, y + 1.5, rz);
+
+            // Room label
+            const roomLabel = createLabel(room.label, "#222");
+            roomLabel.position.set(rx, y + 3.2, rz);
+
+            // Interactivity: click room to show subnet route table
+            roomBox.cursor = "pointer";
+            roomBox.onClick = () => showRouteTablePanel(roomBox, room.subnetRouteTable, room.label);
+
+            group.add(roomBox, roomLabel);
+
+            // --- Firewall endpoint (shield) ---
+            if (room.hasFirewall) {
+                // Shield: stylized 3D object
+                const shield = new THREE.Group();
+                const shieldBody = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.5, 1, 1.5, 32, 1, false, 0, Math.PI),
+                    new THREE.MeshStandardMaterial({ color: 0xf44336, metalness: 0.6, roughness: 0.2 })
+                );
+                shieldBody.rotation.z = Math.PI;
+                shieldBody.position.y = 0.75;
+                const shieldFace = new THREE.Mesh(
+                    new THREE.CircleGeometry(0.7, 32),
+                    new THREE.MeshStandardMaterial({ color: 0xffe082, metalness: 0.8, roughness: 0.1 })
+                );
+                shieldFace.position.z = 0.01;
+                shieldFace.position.y = 1.1;
+                shield.add(shieldBody, shieldFace);
+                shield.position.set(rx, y + 2.2, rz);
+                shield.userData = { type: "firewall", label: "Firewall Endpoint", routeTable: room.firewallRouteTable };
+
+                // Shield label
+                const shieldLabel = createLabel("Firewall", "#f44336");
+                shieldLabel.position.set(rx, y + 3.7, rz);
+
+                // Interactivity: click shield to show firewall route table
+                shield.cursor = "pointer";
+                shield.onClick = () => showRouteTablePanel(shield, room.firewallRouteTable, "Firewall Endpoint");
+
+                group.add(shield, shieldLabel);
+            }
+        });
+
+        scene.add(group);
+        return group;
+    }
+
+    // --- Route Table HTML for Combined Model ---
+    const centralVpcRouteTable = `
+        <b>Central Inspection VPC Route Table</b>
+        <ul>
+            <li>0.0.0.0/0 → Firewall Subnet</li>
+            <li>Spoke VPC CIDRs → TGW</li>
+        </ul>
+    `;
+    const spokeVpcRouteTable = `
+        <b>Spoke VPC Route Table</b>
+        <ul>
+            <li>0.0.0.0/0 → TGW (East-West)</li>
+            <li>Local VPC CIDR → Local</li>
+        </ul>
+    `;
+    const spokeWithLocalRouteTable = `
+        <b>Spoke VPC Route Table (with local IGW)</b>
+        <ul>
+            <li>0.0.0.0/0 → Local Firewall (North-South)</li>
+            <li>Other VPC CIDRs → TGW (East-West)</li>
+            <li>Local VPC CIDR → Local</li>
+        </ul>
+    `;
+    const centralFirewallSubnetTable = `
+        <b>Central Firewall Subnet Route Table</b>
+        <ul>
+            <li>0.0.0.0/0 → Firewall Endpoint</li>
+            <li>Spoke VPC CIDRs → TGW</li>
+        </ul>
+    `;
+    const localFirewallSubnetTable = `
+        <b>Local Firewall Subnet Route Table</b>
+        <ul>
+            <li>0.0.0.0/0 → Internet Gateway</li>
+            <li>Protected Subnet CIDR → Local</li>
+        </ul>
+    `;
+    const centralFirewallTable = `
+        <b>Central Firewall Endpoint</b>
+        <ul>
+            <li>Stateful/Stateless Rules</li>
+            <li>HOME_NET: All VPC CIDRs</li>
+            <li>Inspect East-West traffic</li>
+        </ul>
+    `;
+    const localFirewallTable = `
+        <b>Local Firewall Endpoint</b>
+        <ul>
+            <li>Stateful/Stateless Rules</li>
+            <li>HOME_NET: Local VPC CIDR</li>
+            <li>Inspect North-South traffic</li>
+        </ul>
+    `;
+    const workloadSubnetTable = `
+        <b>Workload Subnet Route Table</b>
+        <ul>
+            <li>0.0.0.0/0 → TGW (East-West)</li>
+            <li>Local VPC CIDR → Local</li>
+        </ul>
+    `;
+    const protectedSubnetTable = `
+        <b>Protected Subnet Route Table</b>
+        <ul>
+            <li>0.0.0.0/0 → Local Firewall Endpoint</li>
+            <li>Local VPC CIDR → Local</li>
+        </ul>
+    `;
+
+    // --- Combined Model Layout ---
+    // Central Inspection VPC (center)
+    createHouseVPC({
+        x: 0, y: 0, z: 0,
+        color: 0x4caf50,
+        label: "Central Inspection VPC",
+        vpcRouteTable: centralVpcRouteTable,
+        rooms: [
+            { 
+                label: "Firewall Subnet A", 
+                color: 0xfff9c4, 
+                hasFirewall: true, 
+                subnetRouteTable: centralFirewallSubnetTable, 
+                firewallRouteTable: centralFirewallTable 
+            },
+            { 
+                label: "Firewall Subnet B", 
+                color: 0xfff9c4, 
+                hasFirewall: true, 
+                subnetRouteTable: centralFirewallSubnetTable, 
+                firewallRouteTable: centralFirewallTable 
+            }
+        ]
+    });
+
+    // Spoke VPC A (left) - Centralized only
+    createHouseVPC({
+        x: -18, y: 0, z: -10,
+        color: 0x2196f3,
+        label: "Spoke VPC A (Centralized)",
+        vpcRouteTable: spokeVpcRouteTable,
+        rooms: [
+            { 
+                label: "Workload Subnet", 
+                color: 0xbbdefb, 
+                hasFirewall: false, 
+                subnetRouteTable: workloadSubnetTable 
+            }
+        ]
+    });
+
+    // Spoke VPC B (right) - Combined (has local firewall)
+    createHouseVPC({
+        x: 18, y: 0, z: -10,
+        color: 0xff9800,
+        label: "Spoke VPC B (Combined)",
+        vpcRouteTable: spokeWithLocalRouteTable,
+        rooms: [
+            { 
+                label: "Protected Subnet", 
+                color: 0xfff9c4, 
+                hasFirewall: false, 
+                subnetRouteTable: protectedSubnetTable 
+            },
+            { 
+                label: "Local Firewall Subnet", 
+                color: 0xffcdd2, 
+                hasFirewall: true, 
+                subnetRouteTable: localFirewallSubnetTable, 
+                firewallRouteTable: localFirewallTable 
+            }
+        ]
+    });
+
+    // Central IGW (for central inspection)
+    const centralIgw = new THREE.Mesh(
+        new THREE.SphereGeometry(1.2, 32, 32),
+        new THREE.MeshStandardMaterial({ color: 0x90caf9 })
+    );
+    centralIgw.position.set(0, 2, 12);
+    scene.add(centralIgw);
+    const centralIgwLabel = createLabel("Central IGW", "#2196f3");
+    centralIgwLabel.position.set(0, 4, 12);
+    scene.add(centralIgwLabel);
+
+    // Local IGW (for Spoke VPC B)
+    const localIgw = new THREE.Mesh(
+        new THREE.SphereGeometry(0.8, 32, 32),
+        new THREE.MeshStandardMaterial({ color: 0x90caf9 })
+    );
+    localIgw.position.set(18, 2, 12);
+    scene.add(localIgw);
+    const localIgwLabel = createLabel("Local IGW", "#2196f3");
+    localIgwLabel.position.set(18, 4, 12);
+    scene.add(localIgwLabel);
+
+    // TGW (roundabout) - for East-West traffic
+    const tgw = new THREE.Mesh(
+        new THREE.TorusGeometry(2, 0.4, 16, 100),
+        new THREE.MeshStandardMaterial({ color: 0xaaaaaa })
+    );
+    tgw.position.set(0, 1, 6);
+    scene.add(tgw);
+    const tgwLabel = createLabel("TGW (East-West)", "#666");
+    tgwLabel.position.set(0, 3, 6);
+    scene.add(tgwLabel);
+
+    // Connections
+    // Central IGW to TGW
+    addConnection([0, 2, 12], [0, 1, 6], 0x2196f3);
+    // TGW to Central Inspection VPC
+    addConnection([0, 1, 6], [0, 1.5, 0], 0x4caf50);
+    // TGW to Spoke VPC A (East-West)
+    addConnection([0, 1, 6], [-18, 1.5, -10], 0x2196f3);
+    // TGW to Spoke VPC B (East-West)
+    addConnection([0, 1, 6], [18, 1.5, -10], 0x2196f3);
+    // Local IGW to Spoke VPC B (North-South)
+    addConnection([18, 2, 12], [18, 1.5, -10], 0xff9800);
+
+    // Add traffic flow labels
+    const eastWestLabel = createLabel("East-West Traffic", "#4caf50");
+    eastWestLabel.position.set(-8, 5, 0);
+    scene.add(eastWestLabel);
+
+    const northSouthLabel = createLabel("North-South Traffic", "#ff9800");
+    northSouthLabel.position.set(18, 5, 0);
+    scene.add(northSouthLabel);
+
+    // Add title
+    const title = createLabel("Combined: Central East-West + Local North-South", "#fff");
+    title.position.set(0, -8, 0);
+    scene.add(title);
+}
+
+function buildNorthSouthIngressModel() {
+    clearScene();
+
+    // --- Helper: House (VPC) ---
+    function createHouseVPC({x, y, z, color, label, vpcRouteTable, rooms}) {
+        // House base
+        const base = new THREE.Mesh(
+            new THREE.BoxGeometry(8, 3, 6),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5 })
+        );
+        base.position.set(x, y + 1.5, z);
+
+        // Roof (triangular prism)
+        const roofGeo = new THREE.ConeGeometry(5, 2, 4);
+        const roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({ color: 0x8d5524 }));
+        roof.position.set(x, y + 4, z);
+        roof.rotation.y = Math.PI / 4;
+
+        // Door
+        const door = new THREE.Mesh(
+            new THREE.BoxGeometry(1, 1.5, 0.2),
+            new THREE.MeshStandardMaterial({ color: 0xdeb887 })
+        );
+        door.position.set(x, y + 0.75, z + 3.1);
+
+        // Windows
+        const window1 = new THREE.Mesh(
+            new THREE.BoxGeometry(0.8, 0.8, 0.1),
+            new THREE.MeshStandardMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.7 })
+        );
+        window1.position.set(x - 2, y + 2, z + 3.05);
+        const window2 = window1.clone();
+        window2.position.set(x + 2, y + 2, z + 3.05);
+
+        // Label
+        const vpcLabel = createLabel(label, "#fff");
+        vpcLabel.position.set(x, y + 6, z);
+
+        // Group
+        const group = new THREE.Group();
+        group.add(base, roof, door, window1, window2, vpcLabel);
+
+        // --- Interactivity: click house to show VPC route table
+        group.cursor = "pointer";
+        group.onClick = () => showRouteTablePanel(group, vpcRouteTable, label);
+
+        // --- Rooms (subnets) ---
+        rooms.forEach((room, idx) => {
+            // Room as a box inside the house
+            const roomBox = new THREE.Mesh(
+                new THREE.BoxGeometry(2.5, 1.5, 2.5),
+                new THREE.MeshStandardMaterial({ color: room.color, opacity: 0.7, transparent: true })
+            );
+            // Arrange rooms in a grid inside the house
+            const rx = x + (idx === 0 ? -2 : 2);
+            const rz = z;
+            roomBox.position.set(rx, y + 1.5, rz);
+
+            // Room label
+            const roomLabel = createLabel(room.label, "#222");
+            roomLabel.position.set(rx, y + 3.2, rz);
+
+            // Interactivity: click room to show subnet route table
+            roomBox.cursor = "pointer";
+            roomBox.onClick = () => showRouteTablePanel(roomBox, room.subnetRouteTable, room.label);
+
+            group.add(roomBox, roomLabel);
+
+            // --- Firewall endpoint (shield) ---
+            if (room.hasFirewall) {
+                // Shield: stylized 3D object
+                const shield = new THREE.Group();
+                const shieldBody = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.5, 1, 1.5, 32, 1, false, 0, Math.PI),
+                    new THREE.MeshStandardMaterial({ color: 0xf44336, metalness: 0.6, roughness: 0.2 })
+                );
+                shieldBody.rotation.z = Math.PI;
+                shieldBody.position.y = 0.75;
+                const shieldFace = new THREE.Mesh(
+                    new THREE.CircleGeometry(0.7, 32),
+                    new THREE.MeshStandardMaterial({ color: 0xffe082, metalness: 0.8, roughness: 0.1 })
+                );
+                shieldFace.position.z = 0.01;
+                shieldFace.position.y = 1.1;
+                shield.add(shieldBody, shieldFace);
+                shield.position.set(rx, y + 2.2, rz);
+                shield.userData = { type: "firewall", label: "Firewall Endpoint", routeTable: room.firewallRouteTable };
+
+                // Shield label
+                const shieldLabel = createLabel("Firewall", "#f44336");
+                shieldLabel.position.set(rx, y + 3.7, rz);
+
+                // Interactivity: click shield to show firewall route table
+                shield.cursor = "pointer";
+                shield.onClick = () => showRouteTablePanel(shield, room.firewallRouteTable, "Firewall Endpoint");
+
+                group.add(shield, shieldLabel);
+            }
+        });
+
+        scene.add(group);
+        return group;
+    }
+
+    // --- Route Table HTML for North-South Ingress Model ---
+    const edgeVpcRouteTable = `
+        <b>Edge (Ingress) VPC Route Table</b>
+        <ul>
+            <li>0.0.0.0/0 → Firewall Subnet</li>
+            <li>Spoke VPC CIDRs → TGW</li>
+        </ul>
+    `;
+    const spokeVpcRouteTable = `
+        <b>Spoke VPC Route Table</b>
+        <ul>
+            <li>0.0.0.0/0 → TGW (for outbound)</li>
+            <li>Local VPC CIDR → Local</li>
+        </ul>
+    `;
+    const firewallSubnetTable = `
+        <b>Firewall Subnet Route Table</b>
+        <ul>
+            <li>0.0.0.0/0 → Firewall Endpoint</li>
+            <li>Spoke VPC CIDRs → TGW</li>
+        </ul>
+    `;
+    const firewallEndpointTable = `
+        <b>Firewall Endpoint</b>
+        <ul>
+            <li>Stateful/Stateless Rules</li>
+            <li>HOME_NET: Spoke VPC CIDRs</li>
+            <li>Inspect inbound traffic from internet</li>
+            <li>Inspect outbound traffic to internet</li>
+        </ul>
+    `;
+    const workloadSubnetTable = `
+        <b>Workload Subnet Route Table</b>
+        <ul>
+            <li>0.0.0.0/0 → TGW</li>
+            <li>Local VPC CIDR → Local</li>
+        </ul>
+    `;
+    const igwRouteTable = `
+        <b>IGW Route Table</b>
+        <ul>
+            <li>All traffic → Firewall Endpoint</li>
+            <li>Forces all inbound traffic through inspection</li>
+        </ul>
+    `;
+
+    // --- North-South Ingress Model Layout ---
+    // Internet/Cloud at the top
+    const internet = new THREE.Mesh(
+        new THREE.SphereGeometry(2, 32, 32),
+        new THREE.MeshStandardMaterial({ color: 0x90caf9, transparent: true, opacity: 0.8 })
+    );
+    internet.position.set(0, 12, 0);
+    scene.add(internet);
+    const internetLabel = createLabel("Internet", "#2196f3");
+    internetLabel.position.set(0, 15, 0);
+    scene.add(internetLabel);
+
+    // Edge (Ingress) VPC (top center)
+    createHouseVPC({
+        x: 0, y: 6, z: 0,
+        color: 0xff5722,
+        label: "Edge (Ingress) VPC",
+        vpcRouteTable: edgeVpcRouteTable,
+        rooms: [
+            { 
+                label: "Firewall Subnet A", 
+                color: 0xfff9c4, 
+                hasFirewall: true, 
+                subnetRouteTable: firewallSubnetTable, 
+                firewallRouteTable: firewallEndpointTable 
+            },
+            { 
+                label: "Firewall Subnet B", 
+                color: 0xfff9c4, 
+                hasFirewall: true, 
+                subnetRouteTable: firewallSubnetTable, 
+                firewallRouteTable: firewallEndpointTable 
+            }
+        ]
+    });
+
+    // IGW (for ingress traffic)
+    const igw = new THREE.Mesh(
+        new THREE.SphereGeometry(1.2, 32, 32),
+        new THREE.MeshStandardMaterial({ color: 0x90caf9 })
+    );
+    igw.position.set(0, 9, 0);
+    igw.cursor = "pointer";
+    igw.onClick = () => showRouteTablePanel(igw, igwRouteTable, "Internet Gateway");
+    scene.add(igw);
+    const igwLabel = createLabel("IGW", "#2196f3");
+    igwLabel.position.set(0, 11, 0);
+    scene.add(igwLabel);
+
+    // TGW (roundabout) - distributes inspected traffic
+    const tgw = new THREE.Mesh(
+        new THREE.TorusGeometry(2, 0.4, 16, 100),
+        new THREE.MeshStandardMaterial({ color: 0xaaaaaa })
+    );
+    tgw.position.set(0, 3, 0);
+    scene.add(tgw);
+    const tgwLabel = createLabel("TGW", "#666");
+    tgwLabel.position.set(0, 5, 0);
+    scene.add(tgwLabel);
+
+    // Spoke VPCs (bottom)
+    const spokePositions = [
+        { x: -15, y: 0, z: -8, color: 0x4caf50, label: "Spoke VPC A" },
+        { x: 15, y: 0, z: -8, color: 0x2196f3, label: "Spoke VPC B" },
+        { x: -15, y: 0, z: 8, color: 0xff9800, label: "Spoke VPC C" },
+        { x: 15, y: 0, z: 8, color: 0x9c27b0, label: "Spoke VPC D" }
+    ];
+
+    spokePositions.forEach((spoke, idx) => {
+        createHouseVPC({
+            x: spoke.x, y: spoke.y, z: spoke.z,
+            color: spoke.color,
+            label: spoke.label,
+            vpcRouteTable: spokeVpcRouteTable,
+            rooms: [
+                { 
+                    label: "Workload Subnet", 
+                    color: 0xbbdefb, 
+                    hasFirewall: false, 
+                    subnetRouteTable: workloadSubnetTable 
+                }
+            ]
+        });
+
+        // Connection from TGW to Spoke VPC
+        addConnection([0, 3, 0], [spoke.x, 1.5, spoke.z], 0x4caf50);
+    });
+
+    // Connections
+    // Internet to IGW
+    addConnection([0, 12, 0], [0, 9, 0], 0x2196f3);
+    // IGW to Edge VPC
+    addConnection([0, 9, 0], [0, 7.5, 0], 0xff5722);
+    // Edge VPC to TGW
+    addConnection([0, 4.5, 0], [0, 3, 0], 0xaaaaaa);
+
+    // Add traffic flow labels
+    const inboundLabel = createLabel("Inbound Traffic", "#ff5722");
+    inboundLabel.position.set(0, 8, 0);
+    scene.add(inboundLabel);
+
+    const outboundLabel = createLabel("Outbound Traffic", "#4caf50");
+    outboundLabel.position.set(0, 1, 0);
+    scene.add(outboundLabel);
+
+    // Add title
+    const title = createLabel("North-South Ingress: Centralized Inbound Inspection", "#fff");
+    title.position.set(0, -8, 0);
+    scene.add(title);
+}
+
+function buildCentralizedDedicatedModel() {
+    clearScene();
+
+    // --- Helper: House (VPC) ---
+    function createHouseVPC({x, y, z, color, label, vpcRouteTable, rooms}) {
+        // House base
+        const base = new THREE.Mesh(
+            new THREE.BoxGeometry(8, 3, 6),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5 })
+        );
+        base.position.set(x, y + 1.5, z);
+
+        // Roof (triangular prism)
+        const roofGeo = new THREE.ConeGeometry(5, 2, 4);
+        const roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({ color: 0x8d5524 }));
+        roof.position.set(x, y + 4, z);
+        roof.rotation.y = Math.PI / 4;
+
+        // Door
+        const door = new THREE.Mesh(
+            new THREE.BoxGeometry(1, 1.5, 0.2),
+            new THREE.MeshStandardMaterial({ color: 0xdeb887 })
+        );
+        door.position.set(x, y + 0.75, z + 3.1);
+
+        // Windows
+        const window1 = new THREE.Mesh(
+            new THREE.BoxGeometry(0.8, 0.8, 0.1),
+            new THREE.MeshStandardMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.7 })
+        );
+        window1.position.set(x - 2, y + 2, z + 3.05);
+        const window2 = window1.clone();
+        window2.position.set(x + 2, y + 2, z + 3.05);
+
+        // Label
+        const vpcLabel = createLabel(label, "#fff");
+        vpcLabel.position.set(x, y + 6, z);
+
+        // Group
+        const group = new THREE.Group();
+        group.add(base, roof, door, window1, window2, vpcLabel);
+
+        // --- Interactivity: click house to show VPC route table
+        group.cursor = "pointer";
+        group.onClick = () => showRouteTablePanel(group, vpcRouteTable, label);
+
+        // --- Rooms (subnets) ---
+        rooms.forEach((room, idx) => {
+            // Room as a box inside the house
+            const roomBox = new THREE.Mesh(
+                new THREE.BoxGeometry(2.5, 1.5, 2.5),
+                new THREE.MeshStandardMaterial({ color: room.color, opacity: 0.7, transparent: true })
+            );
+            // Arrange rooms in a grid inside the house
+            const rx = x + (idx === 0 ? -2 : 2);
+            const rz = z;
+            roomBox.position.set(rx, y + 1.5, rz);
+
+            // Room label
+            const roomLabel = createLabel(room.label, "#222");
+            roomLabel.position.set(rx, y + 3.2, rz);
+
+            // Interactivity: click room to show subnet route table
+            roomBox.cursor = "pointer";
+            roomBox.onClick = () => showRouteTablePanel(roomBox, room.subnetRouteTable, room.label);
+
+            group.add(roomBox, roomLabel);
+
+            // --- Firewall endpoint (shield) ---
+            if (room.hasFirewall) {
+                // Shield: stylized 3D object
+                const shield = new THREE.Group();
+                const shieldBody = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.5, 1, 1.5, 32, 1, false, 0, Math.PI),
+                    new THREE.MeshStandardMaterial({ color: 0xf44336, metalness: 0.6, roughness: 0.2 })
+                );
+                shieldBody.rotation.z = Math.PI;
+                shieldBody.position.y = 0.75;
+                const shieldFace = new THREE.Mesh(
+                    new THREE.CircleGeometry(0.7, 32),
+                    new THREE.MeshStandardMaterial({ color: 0xffe082, metalness: 0.8, roughness: 0.1 })
+                );
+                shieldFace.position.z = 0.01;
+                shieldFace.position.y = 1.1;
+                shield.add(shieldBody, shieldFace);
+                shield.position.set(rx, y + 2.2, rz);
+                shield.userData = { type: "firewall", label: "Firewall Endpoint", routeTable: room.firewallRouteTable };
+
+                // Shield label
+                const shieldLabel = createLabel("Firewall", "#f44336");
+                shieldLabel.position.set(rx, y + 3.7, rz);
+
+                // Interactivity: click shield to show firewall route table
+                shield.cursor = "pointer";
+                shield.onClick = () => showRouteTablePanel(shield, room.firewallRouteTable, "Firewall Endpoint");
+
+                group.add(shield, shieldLabel);
+            }
+        });
+
+        scene.add(group);
+        return group;
+    }
+
+    // --- Route Table HTML for Centralized Dedicated Model ---
+    const inspectionVpcRouteTable = `
+        <b>Inspection VPC Route Table</b>
+        <ul>
+            <li>0.0.0.0/0 → Firewall Subnet</li>
+            <li>Spoke VPC CIDRs → TGW</li>
+        </ul>
+    `;
+    const egressVpcRouteTable = `
+        <b>Egress VPC Route Table</b>
+        <ul>
+            <li>0.0.0.0/0 → Firewall Subnet</li>
+            <li>Spoke VPC CIDRs → TGW</li>
+        </ul>
+    `;
+    const spokeVpcRouteTable = `
+        <b>Spoke VPC Route Table</b>
+        <ul>
+            <li>0.0.0.0/0 → TGW</li>
+            <li>Local VPC CIDR → Local</li>
+        </ul>
+    `;
+    const inspectionFirewallSubnetTable = `
+        <b>Inspection Firewall Subnet Route Table</b>
+        <ul>
+            <li>0.0.0.0/0 → Firewall Endpoint</li>
+            <li>Spoke VPC CIDRs → TGW</li>
+        </ul>
+    `;
+    const egressFirewallSubnetTable = `
+        <b>Egress Firewall Subnet Route Table</b>
+        <ul>
+            <li>0.0.0.0/0 → Firewall Endpoint</li>
+            <li>Spoke VPC CIDRs → TGW</li>
+        </ul>
+    `;
+    const inspectionFirewallTable = `
+        <b>Inspection Firewall Endpoint</b>
+        <ul>
+            <li>Stateful/Stateless Rules</li>
+            <li>HOME_NET: All VPC CIDRs</li>
+            <li>Dedicated East-West inspection</li>
+            <li>Inter-VPC traffic analysis</li>
+        </ul>
+    `;
+    const egressFirewallTable = `
+        <b>Egress Firewall Endpoint</b>
+        <ul>
+            <li>Stateful/Stateless Rules</li>
+            <li>HOME_NET: All VPC CIDRs</li>
+            <li>Dedicated North-South inspection</li>
+            <li>Internet traffic analysis</li>
+        </ul>
+    `;
+    const workloadSubnetTable = `
+        <b>Workload Subnet Route Table</b>
+        <ul>
+            <li>0.0.0.0/0 → TGW</li>
+            <li>Local VPC CIDR → Local</li>
+        </ul>
+    `;
+    const natGatewayTable = `
+        <b>NAT Gateway Route Table</b>
+        <ul>
+            <li>Enables outbound internet for private subnets</li>
+            <li>Located in central egress VPC</li>
+            <li>Shared by multiple spoke VPCs</li>
+        </ul>
+    `;
+
+    // --- Centralized Dedicated Model Layout ---
+    // Internet/Cloud at the top
+    const internet = new THREE.Mesh(
+        new THREE.SphereGeometry(2, 32, 32),
+        new THREE.MeshStandardMaterial({ color: 0x90caf9, transparent: true, opacity: 0.8 })
+    );
+    internet.position.set(0, 12, 0);
+    scene.add(internet);
+    const internetLabel = createLabel("Internet", "#2196f3");
+    internetLabel.position.set(0, 15, 0);
+    scene.add(internetLabel);
+
+    // Inspection VPC (left) - dedicated East-West inspection
+    createHouseVPC({
+        x: -15, y: 6, z: 0,
+        color: 0x4caf50,
+        label: "Inspection VPC",
+        vpcRouteTable: inspectionVpcRouteTable,
+        rooms: [
+            { 
+                label: "Firewall Subnet A", 
+                color: 0xfff9c4, 
+                hasFirewall: true, 
+                subnetRouteTable: inspectionFirewallSubnetTable, 
+                firewallRouteTable: inspectionFirewallTable 
+            },
+            { 
+                label: "Firewall Subnet B", 
+                color: 0xfff9c4, 
+                hasFirewall: true, 
+                subnetRouteTable: inspectionFirewallSubnetTable, 
+                firewallRouteTable: inspectionFirewallTable 
+            }
+        ]
+    });
+
+    // Egress VPC (right) - dedicated North-South egress
+    createHouseVPC({
+        x: 15, y: 6, z: 0,
+        color: 0xff5722,
+        label: "Egress VPC",
+        vpcRouteTable: egressVpcRouteTable,
+        rooms: [
+            { 
+                label: "Firewall Subnet A", 
+                color: 0xffcdd2, 
+                hasFirewall: true, 
+                subnetRouteTable: egressFirewallSubnetTable, 
+                firewallRouteTable: egressFirewallTable 
+            },
+            { 
+                label: "Public Subnet", 
+                color: 0xbbdefb, 
+                hasFirewall: false, 
+                subnetRouteTable: workloadSubnetTable 
+            }
+        ]
+    });
+
+    // IGW (for egress traffic)
+    const igw = new THREE.Mesh(
+        new THREE.SphereGeometry(1.2, 32, 32),
+        new THREE.MeshStandardMaterial({ color: 0x90caf9 })
+    );
+    igw.position.set(15, 9, 0);
+    igw.cursor = "pointer";
+    igw.onClick = () => showRouteTablePanel(igw, natGatewayTable, "Internet Gateway");
+    scene.add(igw);
+    const igwLabel = createLabel("IGW", "#2196f3");
+    igwLabel.position.set(15, 11, 0);
+    scene.add(igwLabel);
+
+    // NAT Gateway (in egress VPC)
+    const nat = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.8, 0.8, 1.5, 32),
+        new THREE.MeshStandardMaterial({ color: 0x9e9e9e })
+    );
+    nat.position.set(15, 4.5, 0);
+    nat.cursor = "pointer";
+    nat.onClick = () => showRouteTablePanel(nat, natGatewayTable, "NAT Gateway");
+    scene.add(nat);
+    const natLabel = createLabel("NAT", "#666");
+    natLabel.position.set(15, 6.5, 0);
+    scene.add(natLabel);
+
+    // TGW (roundabout) - connects all VPCs
+    const tgw = new THREE.Mesh(
+        new THREE.TorusGeometry(2, 0.4, 16, 100),
+        new THREE.MeshStandardMaterial({ color: 0xaaaaaa })
+    );
+    tgw.position.set(0, 3, 0);
+    scene.add(tgw);
+    const tgwLabel = createLabel("TGW", "#666");
+    tgwLabel.position.set(0, 5, 0);
+    scene.add(tgwLabel);
+
+    // Spoke VPCs (bottom)
+    const spokePositions = [
+        { x: -20, y: 0, z: -8, color: 0x2196f3, label: "Spoke VPC A" },
+        { x: 20, y: 0, z: -8, color: 0xff9800, label: "Spoke VPC B" },
+        { x: -20, y: 0, z: 8, color: 0x9c27b0, label: "Spoke VPC C" },
+        { x: 20, y: 0, z: 8, color: 0x607d8b, label: "Spoke VPC D" }
+    ];
+
+    spokePositions.forEach((spoke, idx) => {
+        createHouseVPC({
+            x: spoke.x, y: spoke.y, z: spoke.z,
+            color: spoke.color,
+            label: spoke.label,
+            vpcRouteTable: spokeVpcRouteTable,
+            rooms: [
+                { 
+                    label: "Workload Subnet", 
+                    color: 0xbbdefb, 
+                    hasFirewall: false, 
+                    subnetRouteTable: workloadSubnetTable 
+                }
+            ]
+        });
+
+        // Connection from TGW to Spoke VPC
+        addConnection([0, 3, 0], [spoke.x, 1.5, spoke.z], 0x4caf50);
+    });
+
+    // Connections
+    // Internet to IGW
+    addConnection([0, 12, 0], [15, 9, 0], 0x2196f3);
+    // IGW to Egress VPC
+    addConnection([15, 9, 0], [15, 7.5, 0], 0xff5722);
+    // Egress VPC to TGW
+    addConnection([15, 4.5, 0], [0, 3, 0], 0xaaaaaa);
+    // Inspection VPC to TGW
+    addConnection([-15, 4.5, 0], [0, 3, 0], 0xaaaaaa);
+
+    // Add traffic flow labels
+    const eastWestLabel = createLabel("East-West Traffic", "#4caf50");
+    eastWestLabel.position.set(-15, 8, 0);
+    scene.add(eastWestLabel);
+
+    const northSouthLabel = createLabel("North-South Traffic", "#ff5722");
+    northSouthLabel.position.set(15, 8, 0);
+    scene.add(northSouthLabel);
+
+    // Add title
+    const title = createLabel("Centralized Dedicated: Separate East-West & North-South Firewalls", "#fff");
+    title.position.set(0, -8, 0);
+    scene.add(title);
+}
+
 // --- Route Table Panel Logic ---
 function showRouteTablePanel(object, html, title) {
     const panel = document.getElementById('route-table-panel');
@@ -342,6 +1432,10 @@ buildCentralizedModel();
 document.getElementById('modelSelect').addEventListener('change', (e) => {
     const model = e.target.value;
     if (model === 'centralized') buildCentralizedModel();
+    else if (model === 'decentralized') buildDecentralizedModel();
+    else if (model === 'combined') buildCombinedModel();
+    else if (model === 'north-south-ingress') buildNorthSouthIngressModel();
+    else if (model === 'centralized-dedicated') buildCentralizedDedicatedModel();
     // Add more models as you implement them
 });
 
