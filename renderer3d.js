@@ -35,6 +35,9 @@ scene.add(grid);
 const axes = new THREE.AxesHelper(10);
 scene.add(axes);
 
+// Global array to track all subnet meshes for hover
+const allSubnetMeshes = [];
+
 // ================= Utility Functions =================
 function clearScene() {
     // Preserve camera, lights, grid, axes
@@ -97,42 +100,45 @@ function buildCentralizedModel() {
 
     // --- Helper: House (VPC) ---
     function createHouseVPC({x, y, z, color, label, vpcRouteTable, rooms}) {
-        // House base
-        const base = new THREE.Mesh(
-            new THREE.BoxGeometry(8, 3, 6),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5 })
+        // Open-top, open-front house: four thin side walls and a floor
+        const vpcWidth = 12;
+        const vpcDepth = 9;
+        const vpcHeight = 3;
+        const wallThickness = 0.3;
+        const wallHeight = 2.5;
+        // Floor
+        const floor = new THREE.Mesh(
+            new THREE.BoxGeometry(vpcWidth, wallThickness, vpcDepth),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
         );
-        base.position.set(x, y + 1.5, z);
-
-        // Roof (triangular prism)
-        const roofGeo = new THREE.ConeGeometry(5, 2, 4);
-        const roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({ color: 0x8d5524 }));
-        roof.position.set(x, y + 4, z);
-        roof.rotation.y = Math.PI / 4;
-
-        // Door
-        const door = new THREE.Mesh(
-            new THREE.BoxGeometry(1, 1.5, 0.2),
-            new THREE.MeshStandardMaterial({ color: 0xdeb887 })
+        floor.position.set(x, y + wallThickness / 2, z);
+        // Left wall
+        const leftWall = new THREE.Mesh(
+            new THREE.BoxGeometry(wallThickness, wallHeight, vpcDepth),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
         );
-        door.position.set(x, y + 0.75, z + 3.1);
-
-        // Windows
-        const window1 = new THREE.Mesh(
-            new THREE.BoxGeometry(0.8, 0.8, 0.1),
-            new THREE.MeshStandardMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.7 })
+        leftWall.position.set(x - vpcWidth / 2 + wallThickness / 2, y + wallHeight / 2, z);
+        // Right wall
+        const rightWall = leftWall.clone();
+        rightWall.position.set(x + vpcWidth / 2 - wallThickness / 2, y + wallHeight / 2, z);
+        // Back wall
+        const backWall = new THREE.Mesh(
+            new THREE.BoxGeometry(vpcWidth, wallHeight, wallThickness),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
         );
-        window1.position.set(x - 2, y + 2, z + 3.05);
-        const window2 = window1.clone();
-        window2.position.set(x + 2, y + 2, z + 3.05);
-
+        backWall.position.set(x, y + wallHeight / 2, z - vpcDepth / 2 + wallThickness / 2);
+        // Front wall (short, just a rim at the bottom for context)
+        const frontWall = new THREE.Mesh(
+            new THREE.BoxGeometry(vpcWidth, wallThickness, wallThickness),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
+        );
+        frontWall.position.set(x, y + wallThickness / 2, z + vpcDepth / 2 - wallThickness / 2);
         // Label
         const vpcLabel = createLabel(label, "#fff");
-        vpcLabel.position.set(x, y + 6, z);
-
+        vpcLabel.position.set(x, y + wallHeight + 1.2, z);
         // Group
         const group = new THREE.Group();
-        group.add(base, roof, door, window1, window2, vpcLabel);
+        group.add(floor, leftWall, rightWall, backWall, frontWall, vpcLabel);
 
         // --- Interactivity: click house to show VPC route table
         group.cursor = "pointer";
@@ -142,11 +148,11 @@ function buildCentralizedModel() {
         rooms.forEach((room, idx) => {
             // Room as a box inside the house
             const roomBox = new THREE.Mesh(
-                new THREE.BoxGeometry(2.5, 1.5, 2.5),
+                new THREE.BoxGeometry(3.5, 1.5, 3.5),
                 new THREE.MeshStandardMaterial({ color: room.color, opacity: 0.7, transparent: true })
             );
-            // Arrange rooms in a grid inside the house
-            const rx = x + (idx === 0 ? -2 : 2);
+            // Arrange rooms in a grid inside the house (spread out for new VPC size)
+            const rx = x + (idx === 0 ? -3 : 3);
             const rz = z;
             roomBox.position.set(rx, y + 1.5, rz);
 
@@ -157,6 +163,18 @@ function buildCentralizedModel() {
             // Interactivity: click room to show subnet route table
             roomBox.cursor = "pointer";
             roomBox.onClick = () => showRouteTablePanel(roomBox, room.subnetRouteTable, room.label);
+
+            // --- HOVER EFFECT ---
+            const origColor = room.color;
+            const hoverColor = 0x333366;
+            roomBox.onPointerOver = () => {
+                roomBox.material.color.setHex(hoverColor);
+                roomBox.material.opacity = 0.95;
+            };
+            roomBox.onPointerOut = () => {
+                roomBox.material.color.set(origColor);
+                roomBox.material.opacity = 0.7;
+            };
 
             group.add(roomBox, roomLabel);
 
@@ -190,6 +208,9 @@ function buildCentralizedModel() {
 
                 group.add(shield, shieldLabel);
             }
+
+            // Add to global subnet mesh array for hover
+            allSubnetMeshes.push(roomBox);
         });
 
         scene.add(group);
@@ -300,42 +321,45 @@ function buildDecentralizedModel() {
 
     // --- Helper: House (VPC) ---
     function createHouseVPC({x, y, z, color, label, vpcRouteTable, rooms}) {
-        // House base
-        const base = new THREE.Mesh(
-            new THREE.BoxGeometry(8, 3, 6),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5 })
+        // Open-top, open-front house: four thin side walls and a floor
+        const vpcWidth = 12;
+        const vpcDepth = 9;
+        const vpcHeight = 3;
+        const wallThickness = 0.3;
+        const wallHeight = 2.5;
+        // Floor
+        const floor = new THREE.Mesh(
+            new THREE.BoxGeometry(vpcWidth, wallThickness, vpcDepth),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
         );
-        base.position.set(x, y + 1.5, z);
-
-        // Roof (triangular prism)
-        const roofGeo = new THREE.ConeGeometry(5, 2, 4);
-        const roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({ color: 0x8d5524 }));
-        roof.position.set(x, y + 4, z);
-        roof.rotation.y = Math.PI / 4;
-
-        // Door
-        const door = new THREE.Mesh(
-            new THREE.BoxGeometry(1, 1.5, 0.2),
-            new THREE.MeshStandardMaterial({ color: 0xdeb887 })
+        floor.position.set(x, y + wallThickness / 2, z);
+        // Left wall
+        const leftWall = new THREE.Mesh(
+            new THREE.BoxGeometry(wallThickness, wallHeight, vpcDepth),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
         );
-        door.position.set(x, y + 0.75, z + 3.1);
-
-        // Windows
-        const window1 = new THREE.Mesh(
-            new THREE.BoxGeometry(0.8, 0.8, 0.1),
-            new THREE.MeshStandardMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.7 })
+        leftWall.position.set(x - vpcWidth / 2 + wallThickness / 2, y + wallHeight / 2, z);
+        // Right wall
+        const rightWall = leftWall.clone();
+        rightWall.position.set(x + vpcWidth / 2 - wallThickness / 2, y + wallHeight / 2, z);
+        // Back wall
+        const backWall = new THREE.Mesh(
+            new THREE.BoxGeometry(vpcWidth, wallHeight, wallThickness),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
         );
-        window1.position.set(x - 2, y + 2, z + 3.05);
-        const window2 = window1.clone();
-        window2.position.set(x + 2, y + 2, z + 3.05);
-
+        backWall.position.set(x, y + wallHeight / 2, z - vpcDepth / 2 + wallThickness / 2);
+        // Front wall (short, just a rim at the bottom for context)
+        const frontWall = new THREE.Mesh(
+            new THREE.BoxGeometry(vpcWidth, wallThickness, wallThickness),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
+        );
+        frontWall.position.set(x, y + wallThickness / 2, z + vpcDepth / 2 - wallThickness / 2);
         // Label
         const vpcLabel = createLabel(label, "#fff");
-        vpcLabel.position.set(x, y + 6, z);
-
+        vpcLabel.position.set(x, y + wallHeight + 1.2, z);
         // Group
         const group = new THREE.Group();
-        group.add(base, roof, door, window1, window2, vpcLabel);
+        group.add(floor, leftWall, rightWall, backWall, frontWall, vpcLabel);
 
         // --- Interactivity: click house to show VPC route table
         group.cursor = "pointer";
@@ -345,11 +369,11 @@ function buildDecentralizedModel() {
         rooms.forEach((room, idx) => {
             // Room as a box inside the house
             const roomBox = new THREE.Mesh(
-                new THREE.BoxGeometry(2.5, 1.5, 2.5),
+                new THREE.BoxGeometry(3.5, 1.5, 3.5),
                 new THREE.MeshStandardMaterial({ color: room.color, opacity: 0.7, transparent: true })
             );
-            // Arrange rooms in a grid inside the house
-            const rx = x + (idx === 0 ? -2 : 2);
+            // Arrange rooms in a grid inside the house (spread out for new VPC size)
+            const rx = x + (idx === 0 ? -3 : 3);
             const rz = z;
             roomBox.position.set(rx, y + 1.5, rz);
 
@@ -360,6 +384,18 @@ function buildDecentralizedModel() {
             // Interactivity: click room to show subnet route table
             roomBox.cursor = "pointer";
             roomBox.onClick = () => showRouteTablePanel(roomBox, room.subnetRouteTable, room.label);
+
+            // --- HOVER EFFECT ---
+            const origColor = room.color;
+            const hoverColor = 0x333366;
+            roomBox.onPointerOver = () => {
+                roomBox.material.color.setHex(hoverColor);
+                roomBox.material.opacity = 0.95;
+            };
+            roomBox.onPointerOut = () => {
+                roomBox.material.color.set(origColor);
+                roomBox.material.opacity = 0.7;
+            };
 
             group.add(roomBox, roomLabel);
 
@@ -393,47 +429,53 @@ function buildDecentralizedModel() {
 
                 group.add(shield, shieldLabel);
             }
+
+            // Add to global subnet mesh array for hover
+            allSubnetMeshes.push(roomBox);
         });
 
         scene.add(group);
         return group;
     }
 
-    // --- Route Table HTML for Decentralized Model ---
-    const protectedVpcRouteTable = `
-        <b>Protected VPC Route Table</b>
-        <ul>
-            <li>Local VPC CIDR → Local</li>
-            <li>Protected Subnet CIDR → Firewall Endpoint</li>
-        </ul>
-    `;
-    const protectedSubnetRouteTable = `
-        <b>Protected Subnet Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → Firewall Endpoint (vpce-id)</li>
-            <li>Local VPC CIDR → Local</li>
-        </ul>
+    // --- Route Table HTML for Decentralized Model (detailed, PDF-style) ---
+    const igwRouteTable = `
+        <div style="margin-bottom:8px;font-weight:bold;">IGW Ingress Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>10.0.0.0/16</td><td>local</td></tr>
+                <tr><td>10.0.0.0/24</td><td>vpce-id</td></tr>
+            </tbody>
+        </table>
     `;
     const firewallSubnetRouteTable = `
-        <b>Firewall Subnet Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → Internet Gateway (igw-id)</li>
-            <li>Protected Subnet CIDR → Local</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Firewall Subnet Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>10.0.0.0/16</td><td>local</td></tr>
+                <tr><td>0.0.0.0/0</td><td>igw-id</td></tr>
+            </tbody>
+        </table>
+    `;
+    // Example for AZ A; in a real multi-AZ, you'd show per-AZ tables
+    const protectedSubnetRouteTable = `
+        <div style="margin-bottom:8px;font-weight:bold;">Protected Subnet Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>10.0.0.0/16</td><td>local</td></tr>
+                <tr><td>0.0.0.0/0</td><td>vpce-id</td></tr>
+            </tbody>
+        </table>
     `;
     const firewallEndpointTable = `
-        <b>Firewall Endpoint</b>
-        <ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Firewall Endpoint</div>
+        <ul style="margin:0 0 0 16px;padding:0;">
             <li>Stateful/Stateless Rules</li>
             <li>HOME_NET: Protected Subnet CIDR</li>
             <li>Inspect inbound/outbound traffic</li>
-        </ul>
-    `;
-    const igwRouteTable = `
-        <b>IGW Ingress Route Table</b>
-        <ul>
-            <li>Protected Subnet CIDR → Firewall Endpoint</li>
-            <li>Forces symmetric routing</li>
         </ul>
     `;
 
@@ -462,16 +504,16 @@ function buildDecentralizedModel() {
             x: vpc.x, y: vpc.y, z: vpc.z,
             color: vpc.color,
             label: vpc.label,
-            vpcRouteTable: protectedVpcRouteTable,
+            vpcRouteTable: protectedSubnetRouteTable, // Show protected subnet table for house click
             rooms: [
                 { 
-                    label: "Protected Subnet", 
+                    label: "Protected Subnet (10.0.0.0/24)", 
                     color: 0xfff9c4, 
                     hasFirewall: false, 
                     subnetRouteTable: protectedSubnetRouteTable 
                 },
                 { 
-                    label: "Firewall Subnet", 
+                    label: "Firewall Subnet (10.0.1.0/28)", 
                     color: 0xffcdd2, 
                     hasFirewall: true, 
                     subnetRouteTable: firewallSubnetRouteTable, 
@@ -510,42 +552,45 @@ function buildCombinedModel() {
 
     // --- Helper: House (VPC) ---
     function createHouseVPC({x, y, z, color, label, vpcRouteTable, rooms}) {
-        // House base
-        const base = new THREE.Mesh(
-            new THREE.BoxGeometry(8, 3, 6),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5 })
+        // Open-top, open-front house: four thin side walls and a floor
+        const vpcWidth = 12;
+        const vpcDepth = 9;
+        const vpcHeight = 3;
+        const wallThickness = 0.3;
+        const wallHeight = 2.5;
+        // Floor
+        const floor = new THREE.Mesh(
+            new THREE.BoxGeometry(vpcWidth, wallThickness, vpcDepth),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
         );
-        base.position.set(x, y + 1.5, z);
-
-        // Roof (triangular prism)
-        const roofGeo = new THREE.ConeGeometry(5, 2, 4);
-        const roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({ color: 0x8d5524 }));
-        roof.position.set(x, y + 4, z);
-        roof.rotation.y = Math.PI / 4;
-
-        // Door
-        const door = new THREE.Mesh(
-            new THREE.BoxGeometry(1, 1.5, 0.2),
-            new THREE.MeshStandardMaterial({ color: 0xdeb887 })
+        floor.position.set(x, y + wallThickness / 2, z);
+        // Left wall
+        const leftWall = new THREE.Mesh(
+            new THREE.BoxGeometry(wallThickness, wallHeight, vpcDepth),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
         );
-        door.position.set(x, y + 0.75, z + 3.1);
-
-        // Windows
-        const window1 = new THREE.Mesh(
-            new THREE.BoxGeometry(0.8, 0.8, 0.1),
-            new THREE.MeshStandardMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.7 })
+        leftWall.position.set(x - vpcWidth / 2 + wallThickness / 2, y + wallHeight / 2, z);
+        // Right wall
+        const rightWall = leftWall.clone();
+        rightWall.position.set(x + vpcWidth / 2 - wallThickness / 2, y + wallHeight / 2, z);
+        // Back wall
+        const backWall = new THREE.Mesh(
+            new THREE.BoxGeometry(vpcWidth, wallHeight, wallThickness),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
         );
-        window1.position.set(x - 2, y + 2, z + 3.05);
-        const window2 = window1.clone();
-        window2.position.set(x + 2, y + 2, z + 3.05);
-
+        backWall.position.set(x, y + wallHeight / 2, z - vpcDepth / 2 + wallThickness / 2);
+        // Front wall (short, just a rim at the bottom for context)
+        const frontWall = new THREE.Mesh(
+            new THREE.BoxGeometry(vpcWidth, wallThickness, wallThickness),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
+        );
+        frontWall.position.set(x, y + wallThickness / 2, z + vpcDepth / 2 - wallThickness / 2);
         // Label
         const vpcLabel = createLabel(label, "#fff");
-        vpcLabel.position.set(x, y + 6, z);
-
+        vpcLabel.position.set(x, y + wallHeight + 1.2, z);
         // Group
         const group = new THREE.Group();
-        group.add(base, roof, door, window1, window2, vpcLabel);
+        group.add(floor, leftWall, rightWall, backWall, frontWall, vpcLabel);
 
         // --- Interactivity: click house to show VPC route table
         group.cursor = "pointer";
@@ -555,11 +600,11 @@ function buildCombinedModel() {
         rooms.forEach((room, idx) => {
             // Room as a box inside the house
             const roomBox = new THREE.Mesh(
-                new THREE.BoxGeometry(2.5, 1.5, 2.5),
+                new THREE.BoxGeometry(3.5, 1.5, 3.5),
                 new THREE.MeshStandardMaterial({ color: room.color, opacity: 0.7, transparent: true })
             );
-            // Arrange rooms in a grid inside the house
-            const rx = x + (idx === 0 ? -2 : 2);
+            // Arrange rooms in a grid inside the house (spread out for new VPC size)
+            const rx = x + (idx === 0 ? -3 : 3);
             const rz = z;
             roomBox.position.set(rx, y + 1.5, rz);
 
@@ -570,6 +615,18 @@ function buildCombinedModel() {
             // Interactivity: click room to show subnet route table
             roomBox.cursor = "pointer";
             roomBox.onClick = () => showRouteTablePanel(roomBox, room.subnetRouteTable, room.label);
+
+            // --- HOVER EFFECT ---
+            const origColor = room.color;
+            const hoverColor = 0x333366;
+            roomBox.onPointerOver = () => {
+                roomBox.material.color.setHex(hoverColor);
+                roomBox.material.opacity = 0.95;
+            };
+            roomBox.onPointerOut = () => {
+                roomBox.material.color.set(origColor);
+                roomBox.material.opacity = 0.7;
+            };
 
             group.add(roomBox, roomLabel);
 
@@ -603,6 +660,9 @@ function buildCombinedModel() {
 
                 group.add(shield, shieldLabel);
             }
+
+            // Add to global subnet mesh array for hover
+            allSubnetMeshes.push(roomBox);
         });
 
         scene.add(group);
@@ -806,42 +866,45 @@ function buildNorthSouthIngressModel() {
 
     // --- Helper: House (VPC) ---
     function createHouseVPC({x, y, z, color, label, vpcRouteTable, rooms}) {
-        // House base
-        const base = new THREE.Mesh(
-            new THREE.BoxGeometry(8, 3, 6),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5 })
+        // Open-top, open-front house: four thin side walls and a floor
+        const vpcWidth = 12;
+        const vpcDepth = 9;
+        const vpcHeight = 3;
+        const wallThickness = 0.3;
+        const wallHeight = 2.5;
+        // Floor
+        const floor = new THREE.Mesh(
+            new THREE.BoxGeometry(vpcWidth, wallThickness, vpcDepth),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
         );
-        base.position.set(x, y + 1.5, z);
-
-        // Roof (triangular prism)
-        const roofGeo = new THREE.ConeGeometry(5, 2, 4);
-        const roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({ color: 0x8d5524 }));
-        roof.position.set(x, y + 4, z);
-        roof.rotation.y = Math.PI / 4;
-
-        // Door
-        const door = new THREE.Mesh(
-            new THREE.BoxGeometry(1, 1.5, 0.2),
-            new THREE.MeshStandardMaterial({ color: 0xdeb887 })
+        floor.position.set(x, y + wallThickness / 2, z);
+        // Left wall
+        const leftWall = new THREE.Mesh(
+            new THREE.BoxGeometry(wallThickness, wallHeight, vpcDepth),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
         );
-        door.position.set(x, y + 0.75, z + 3.1);
-
-        // Windows
-        const window1 = new THREE.Mesh(
-            new THREE.BoxGeometry(0.8, 0.8, 0.1),
-            new THREE.MeshStandardMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.7 })
+        leftWall.position.set(x - vpcWidth / 2 + wallThickness / 2, y + wallHeight / 2, z);
+        // Right wall
+        const rightWall = leftWall.clone();
+        rightWall.position.set(x + vpcWidth / 2 - wallThickness / 2, y + wallHeight / 2, z);
+        // Back wall
+        const backWall = new THREE.Mesh(
+            new THREE.BoxGeometry(vpcWidth, wallHeight, wallThickness),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
         );
-        window1.position.set(x - 2, y + 2, z + 3.05);
-        const window2 = window1.clone();
-        window2.position.set(x + 2, y + 2, z + 3.05);
-
+        backWall.position.set(x, y + wallHeight / 2, z - vpcDepth / 2 + wallThickness / 2);
+        // Front wall (short, just a rim at the bottom for context)
+        const frontWall = new THREE.Mesh(
+            new THREE.BoxGeometry(vpcWidth, wallThickness, wallThickness),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
+        );
+        frontWall.position.set(x, y + wallThickness / 2, z + vpcDepth / 2 - wallThickness / 2);
         // Label
         const vpcLabel = createLabel(label, "#fff");
-        vpcLabel.position.set(x, y + 6, z);
-
+        vpcLabel.position.set(x, y + wallHeight + 1.2, z);
         // Group
         const group = new THREE.Group();
-        group.add(base, roof, door, window1, window2, vpcLabel);
+        group.add(floor, leftWall, rightWall, backWall, frontWall, vpcLabel);
 
         // --- Interactivity: click house to show VPC route table
         group.cursor = "pointer";
@@ -899,6 +962,9 @@ function buildNorthSouthIngressModel() {
 
                 group.add(shield, shieldLabel);
             }
+
+            // Add to global subnet mesh array for hover
+            allSubnetMeshes.push(roomBox);
         });
 
         scene.add(group);
@@ -1067,42 +1133,45 @@ function buildCentralizedDedicatedModel() {
 
     // --- Helper: House (VPC) ---
     function createHouseVPC({x, y, z, color, label, vpcRouteTable, rooms}) {
-        // House base
-        const base = new THREE.Mesh(
-            new THREE.BoxGeometry(8, 3, 6),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5 })
+        // Open-top, open-front house: four thin side walls and a floor
+        const vpcWidth = 12;
+        const vpcDepth = 9;
+        const vpcHeight = 3;
+        const wallThickness = 0.3;
+        const wallHeight = 2.5;
+        // Floor
+        const floor = new THREE.Mesh(
+            new THREE.BoxGeometry(vpcWidth, wallThickness, vpcDepth),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
         );
-        base.position.set(x, y + 1.5, z);
-
-        // Roof (triangular prism)
-        const roofGeo = new THREE.ConeGeometry(5, 2, 4);
-        const roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({ color: 0x8d5524 }));
-        roof.position.set(x, y + 4, z);
-        roof.rotation.y = Math.PI / 4;
-
-        // Door
-        const door = new THREE.Mesh(
-            new THREE.BoxGeometry(1, 1.5, 0.2),
-            new THREE.MeshStandardMaterial({ color: 0xdeb887 })
+        floor.position.set(x, y + wallThickness / 2, z);
+        // Left wall
+        const leftWall = new THREE.Mesh(
+            new THREE.BoxGeometry(wallThickness, wallHeight, vpcDepth),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
         );
-        door.position.set(x, y + 0.75, z + 3.1);
-
-        // Windows
-        const window1 = new THREE.Mesh(
-            new THREE.BoxGeometry(0.8, 0.8, 0.1),
-            new THREE.MeshStandardMaterial({ color: 0x87ceeb, transparent: true, opacity: 0.7 })
+        leftWall.position.set(x - vpcWidth / 2 + wallThickness / 2, y + wallHeight / 2, z);
+        // Right wall
+        const rightWall = leftWall.clone();
+        rightWall.position.set(x + vpcWidth / 2 - wallThickness / 2, y + wallHeight / 2, z);
+        // Back wall
+        const backWall = new THREE.Mesh(
+            new THREE.BoxGeometry(vpcWidth, wallHeight, wallThickness),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
         );
-        window1.position.set(x - 2, y + 2, z + 3.05);
-        const window2 = window1.clone();
-        window2.position.set(x + 2, y + 2, z + 3.05);
-
+        backWall.position.set(x, y + wallHeight / 2, z - vpcDepth / 2 + wallThickness / 2);
+        // Front wall (short, just a rim at the bottom for context)
+        const frontWall = new THREE.Mesh(
+            new THREE.BoxGeometry(vpcWidth, wallThickness, wallThickness),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
+        );
+        frontWall.position.set(x, y + wallThickness / 2, z + vpcDepth / 2 - wallThickness / 2);
         // Label
         const vpcLabel = createLabel(label, "#fff");
-        vpcLabel.position.set(x, y + 6, z);
-
+        vpcLabel.position.set(x, y + wallHeight + 1.2, z);
         // Group
         const group = new THREE.Group();
-        group.add(base, roof, door, window1, window2, vpcLabel);
+        group.add(floor, leftWall, rightWall, backWall, frontWall, vpcLabel);
 
         // --- Interactivity: click house to show VPC route table
         group.cursor = "pointer";
@@ -1160,6 +1229,9 @@ function buildCentralizedDedicatedModel() {
 
                 group.add(shield, shieldLabel);
             }
+
+            // Add to global subnet mesh array for hover
+            allSubnetMeshes.push(roomBox);
         });
 
         scene.add(group);
@@ -1421,6 +1493,31 @@ renderer.domElement.addEventListener('click', (event) => {
     }
     // Clicked empty space: hide panel
     document.getElementById('route-table-panel').style.display = 'none';
+});
+
+// --- Add raycaster for hover effect on subnets ---
+const pointer = new THREE.Vector2();
+let lastHovered = null;
+renderer.domElement.addEventListener('mousemove', (event) => {
+    pointer.x = (event.clientX / renderer.domElement.clientWidth) * 2 - 1;
+    pointer.y = -(event.clientY / renderer.domElement.clientHeight) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+    const intersects = raycaster.intersectObjects(allSubnetMeshes, true);
+    let found = false;
+    for (let i = 0; i < intersects.length; i++) {
+        const obj = intersects[i].object;
+        if (obj.onPointerOver) {
+            if (lastHovered && lastHovered !== obj && lastHovered.onPointerOut) lastHovered.onPointerOut();
+            obj.onPointerOver();
+            lastHovered = obj;
+            found = true;
+            break;
+        }
+    }
+    if (!found && lastHovered && lastHovered.onPointerOut) {
+        lastHovered.onPointerOut();
+        lastHovered = null;
+    }
 });
 
 // ================= Model Selector Hook =================
