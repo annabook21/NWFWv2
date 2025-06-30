@@ -228,41 +228,61 @@ function buildCentralizedModel() {
             </tbody>
         </table>
     `;
-    const firewallSubnetRouteTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Firewall Subnet Route Table</div>
+    const firewallSubnetRouteTableA = `
+        <div style="margin-bottom:8px;font-weight:bold;">Firewall Subnet A Route Table</div>
         <table class="route-table">
             <thead><tr><th>Destination</th><th>Target</th></tr></thead>
             <tbody>
-                <tr><td>0.0.0.0/0</td><td>Firewall Endpoint (vpce-a)</td></tr>
+                <tr><td>0.0.0.0/0</td><td>Firewall Endpoint (vpce-az-a-id)</td></tr>
                 <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
             </tbody>
         </table>
     `;
-    const firewallEndpointTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Firewall Endpoint</div>
+    const firewallSubnetRouteTableB = `
+        <div style="margin-bottom:8px;font-weight:bold;">Firewall Subnet B Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>Firewall Endpoint (vpce-az-b-id)</td></tr>
+                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
+            </tbody>
+        </table>
+    `;
+    const firewallEndpointTableA = `
+        <div style="margin-bottom:8px;font-weight:bold;">Firewall Endpoint (vpce-az-a-id)</div>
         <ul style="margin:0 0 0 16px;padding:0;">
             <li>Stateful/Stateless Rules</li>
             <li>HOME_NET: All VPC CIDRs</li>
             <li>Inspects all traffic between VPCs and to/from internet</li>
         </ul>
     `;
-    const spokeVpcRouteTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Spoke VPC Route Table</div>
+    const firewallEndpointTableB = `
+        <div style="margin-bottom:8px;font-weight:bold;">Firewall Endpoint (vpce-az-b-id)</div>
+        <ul style="margin:0 0 0 16px;padding:0;">
+            <li>Stateful/Stateless Rules</li>
+            <li>HOME_NET: All VPC CIDRs</li>
+            <li>Inspects all traffic between VPCs and to/from internet</li>
+        </ul>
+    `;
+    const tgwRouteTable = `
+        <div style="margin-bottom:8px;font-weight:bold;">TGW Route Table</div>
         <table class="route-table">
             <thead><tr><th>Destination</th><th>Target</th></tr></thead>
             <tbody>
-                <tr><td>0.0.0.0/0</td><td>TGW (tgw-0def5678)</td></tr>
-                <tr><td>10.2.0.0/16</td><td>local</td></tr>
+                <tr><td>10.1.0.0/16</td><td>Inspection VPC Attachment</td></tr>
+                <tr><td>10.2.0.0/16</td><td>Spoke VPC A Attachment</td></tr>
+                <tr><td>10.3.0.0/16</td><td>Spoke VPC B Attachment</td></tr>
+                <tr><td>0.0.0.0/0</td><td>Inspection VPC Attachment</td></tr>
             </tbody>
         </table>
     `;
-    const workloadSubnetTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Workload Subnet Route Table</div>
+    const publicRouteTable = `
+        <div style="margin-bottom:8px;font-weight:bold;">Public Route Table</div>
         <table class="route-table">
             <thead><tr><th>Destination</th><th>Target</th></tr></thead>
             <tbody>
-                <tr><td>0.0.0.0/0</td><td>TGW (tgw-0def5678)</td></tr>
-                <tr><td>10.2.0.0/16</td><td>local</td></tr>
+                <tr><td>0.0.0.0/0</td><td>igw-id</td></tr>
+                <tr><td>10.1.0.0/16</td><td>local</td></tr>
             </tbody>
         </table>
     `;
@@ -275,8 +295,8 @@ function buildCentralizedModel() {
         label: "Inspection VPC",
         vpcRouteTable: inspVpcRouteTable,
         rooms: [
-            { label: "Firewall Subnet A", color: 0xfff9c4, hasFirewall: true, subnetRouteTable: firewallSubnetRouteTable, firewallRouteTable: firewallEndpointTable },
-            { label: "Firewall Subnet B", color: 0xfff9c4, hasFirewall: true, subnetRouteTable: firewallSubnetRouteTable, firewallRouteTable: firewallEndpointTable }
+            { label: "Firewall Subnet A", color: 0xfff9c4, hasFirewall: true, subnetRouteTable: firewallSubnetRouteTableA, firewallRouteTable: firewallEndpointTableA },
+            { label: "Firewall Subnet B", color: 0xfff9c4, hasFirewall: true, subnetRouteTable: firewallSubnetRouteTableB, firewallRouteTable: firewallEndpointTableB }
         ]
     });
 
@@ -285,18 +305,18 @@ function buildCentralizedModel() {
         x: -18, y: 0, z: -10,
         color: 0x2196f3,
         label: "Spoke VPC A",
-        vpcRouteTable: spokeVpcRouteTable,
+        vpcRouteTable: tgwRouteTable,
         rooms: [
-            { label: "Workload Subnet", color: 0xbbdefb, hasFirewall: false, subnetRouteTable: workloadSubnetTable }
+            { label: "Workload Subnet", color: 0xbbdefb, hasFirewall: false, subnetRouteTable: publicRouteTable }
         ]
     });
     createHouseVPC({
         x: 18, y: 0, z: -10,
         color: 0xff9800,
         label: "Spoke VPC B",
-        vpcRouteTable: spokeVpcRouteTable,
+        vpcRouteTable: tgwRouteTable,
         rooms: [
-            { label: "Workload Subnet", color: 0xffe0b2, hasFirewall: false, subnetRouteTable: workloadSubnetTable }
+            { label: "Workload Subnet", color: 0xffe0b2, hasFirewall: false, subnetRouteTable: publicRouteTable }
         ]
     });
 
@@ -306,6 +326,8 @@ function buildCentralizedModel() {
         new THREE.MeshStandardMaterial({ color: 0x90caf9 })
     );
     igw.position.set(0, 2, 12);
+    igw.cursor = "pointer";
+    igw.onClick = () => showRouteTablePanel(igw, publicRouteTable, "Public Route Table");
     scene.add(igw);
     const igwLabel = createLabel("IGW", "#2196f3");
     igwLabel.position.set(0, 4, 12);
@@ -317,6 +339,8 @@ function buildCentralizedModel() {
         new THREE.MeshStandardMaterial({ color: 0xaaaaaa })
     );
     tgw.position.set(0, 1, 6);
+    tgw.cursor = "pointer";
+    tgw.onClick = () => showRouteTablePanel(tgw, tgwRouteTable, "TGW Route Table");
     scene.add(tgw);
     const tgwLabel = createLabel("TGW", "#666");
     tgwLabel.position.set(0, 3, 6);
@@ -327,6 +351,25 @@ function buildCentralizedModel() {
     addConnection([0, 1, 6], [0, 1.5, 0], 0x4caf50); // TGW to Inspection VPC
     addConnection([0, 1, 6], [-18, 1.5, -10], 0x2196f3); // TGW to Spoke A
     addConnection([0, 1, 6], [18, 1.5, -10], 0x2196f3); // TGW to Spoke B
+
+    // Step numbers and arrows
+    function addStepNumber(position, number) {
+        const label = createLabel(number.toString(), "#fff");
+        label.position.set(...position);
+        scene.add(label);
+    }
+    function addArrow(from, to, color = 0xff9800) {
+        const dir = new THREE.Vector3(to[0] - from[0], to[1] - from[1], to[2] - from[2]).normalize();
+        const length = Math.sqrt((to[0] - from[0]) ** 2 + (to[1] - from[1]) ** 2 + (to[2] - from[2]) ** 2);
+        const arrow = new THREE.ArrowHelper(dir, new THREE.Vector3(...from), length, color, 1, 0.5);
+        scene.add(arrow);
+    }
+    // Example steps/arrows for Centralized model
+    addStepNumber([0, 2.5, 12], 1); // IGW
+    addArrow([0, 2, 12], [0, 1, 6]); // IGW to TGW
+    addStepNumber([0, 1.5, 6], 2); // TGW
+    addArrow([0, 1, 6], [0, 1.5, 0]); // TGW to Inspection VPC
+    addStepNumber([0, 1.5, 0], 3); // Inspection VPC
 }
 
 function buildDecentralizedModel() {
@@ -863,6 +906,8 @@ function buildCombinedModel() {
         new THREE.MeshStandardMaterial({ color: 0xaaaaaa })
     );
     tgw.position.set(0, 1, 6);
+    tgw.cursor = "pointer";
+    tgw.onClick = () => showRouteTablePanel(tgw, tgwRouteTable, "TGW Route Table");
     scene.add(tgw);
     const tgwLabel = createLabel("TGW", "#666");
     tgwLabel.position.set(0, 3, 6);
