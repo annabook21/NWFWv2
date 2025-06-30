@@ -219,39 +219,52 @@ function buildCentralizedModel() {
 
     // --- Route Table HTML ---
     const inspVpcRouteTable = `
-        <b>Inspection VPC Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → Firewall Subnet</li>
-            <li>Spoke VPC CIDRs → TGW</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Inspection VPC Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>Firewall Subnet (subnet-0abc1234)</td></tr>
+                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
+            </tbody>
+        </table>
     `;
     const firewallSubnetRouteTable = `
-        <b>Firewall Subnet Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → Firewall Endpoint</li>
-            <li>Spoke VPC CIDRs → TGW</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Firewall Subnet Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>Firewall Endpoint (vpce-a)</td></tr>
+                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
+            </tbody>
+        </table>
     `;
     const firewallEndpointTable = `
-        <b>Firewall Endpoint</b>
-        <ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Firewall Endpoint</div>
+        <ul style="margin:0 0 0 16px;padding:0;">
             <li>Stateful/Stateless Rules</li>
             <li>HOME_NET: All VPC CIDRs</li>
+            <li>Inspects all traffic between VPCs and to/from internet</li>
         </ul>
     `;
     const spokeVpcRouteTable = `
-        <b>Spoke VPC Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → TGW</li>
-            <li>Local VPC CIDR → Local</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Spoke VPC Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>TGW (tgw-0def5678)</td></tr>
+                <tr><td>10.2.0.0/16</td><td>local</td></tr>
+            </tbody>
+        </table>
     `;
     const workloadSubnetTable = `
-        <b>Workload Subnet Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → TGW</li>
-            <li>Local VPC CIDR → Local</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Workload Subnet Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>TGW (tgw-0def5678)</td></tr>
+                <tr><td>10.2.0.0/16</td><td>local</td></tr>
+            </tbody>
+        </table>
     `;
 
     // --- Centralized Model Layout ---
@@ -671,70 +684,91 @@ function buildCombinedModel() {
 
     // --- Route Table HTML for Combined Model ---
     const centralVpcRouteTable = `
-        <b>Central Inspection VPC Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → Firewall Subnet</li>
-            <li>Spoke VPC CIDRs → TGW</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Central Inspection VPC Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>Firewall Subnet (subnet-0abc1234)</td></tr>
+                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
+            </tbody>
+        </table>
     `;
     const spokeVpcRouteTable = `
-        <b>Spoke VPC Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → TGW (East-West)</li>
-            <li>Local VPC CIDR → Local</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Spoke VPC Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>TGW (tgw-0def5678)</td></tr>
+                <tr><td>10.2.0.0/16</td><td>local</td></tr>
+            </tbody>
+        </table>
     `;
     const spokeWithLocalRouteTable = `
-        <b>Spoke VPC Route Table (with local IGW)</b>
-        <ul>
-            <li>0.0.0.0/0 → Local Firewall (North-South)</li>
-            <li>Other VPC CIDRs → TGW (East-West)</li>
-            <li>Local VPC CIDR → Local</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Spoke VPC Route Table (with local IGW)</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>Local Firewall (vpce-b)</td></tr>
+                <tr><td>10.3.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
+                <tr><td>10.3.0.0/16</td><td>local</td></tr>
+            </tbody>
+        </table>
     `;
     const centralFirewallSubnetTable = `
-        <b>Central Firewall Subnet Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → Firewall Endpoint</li>
-            <li>Spoke VPC CIDRs → TGW</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Central Firewall Subnet Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>Firewall Endpoint (vpce-a)</td></tr>
+                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
+            </tbody>
+        </table>
     `;
     const localFirewallSubnetTable = `
-        <b>Local Firewall Subnet Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → Internet Gateway</li>
-            <li>Protected Subnet CIDR → Local</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Local Firewall Subnet Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>Internet Gateway (igw-0a1b2c3d)</td></tr>
+                <tr><td>10.3.0.0/16</td><td>local</td></tr>
+            </tbody>
+        </table>
     `;
     const centralFirewallTable = `
-        <b>Central Firewall Endpoint</b>
-        <ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Central Firewall Endpoint</div>
+        <ul style="margin:0 0 0 16px;padding:0;">
             <li>Stateful/Stateless Rules</li>
             <li>HOME_NET: All VPC CIDRs</li>
             <li>Inspect East-West traffic</li>
         </ul>
     `;
     const localFirewallTable = `
-        <b>Local Firewall Endpoint</b>
-        <ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Local Firewall Endpoint</div>
+        <ul style="margin:0 0 0 16px;padding:0;">
             <li>Stateful/Stateless Rules</li>
             <li>HOME_NET: Local VPC CIDR</li>
             <li>Inspect North-South traffic</li>
         </ul>
     `;
     const workloadSubnetTable = `
-        <b>Workload Subnet Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → TGW (East-West)</li>
-            <li>Local VPC CIDR → Local</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Workload Subnet Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>TGW (tgw-0def5678)</td></tr>
+                <tr><td>10.2.0.0/16</td><td>local</td></tr>
+            </tbody>
+        </table>
     `;
     const protectedSubnetTable = `
-        <b>Protected Subnet Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → Local Firewall Endpoint</li>
-            <li>Local VPC CIDR → Local</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Protected Subnet Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>Local Firewall Endpoint (vpce-b)</td></tr>
+                <tr><td>10.3.0.0/16</td><td>local</td></tr>
+            </tbody>
+        </table>
     `;
 
     // --- Combined Model Layout ---
@@ -830,7 +864,7 @@ function buildCombinedModel() {
     );
     tgw.position.set(0, 1, 6);
     scene.add(tgw);
-    const tgwLabel = createLabel("TGW (East-West)", "#666");
+    const tgwLabel = createLabel("TGW", "#666");
     tgwLabel.position.set(0, 3, 6);
     scene.add(tgwLabel);
 
@@ -851,7 +885,7 @@ function buildCombinedModel() {
     eastWestLabel.position.set(-8, 5, 0);
     scene.add(eastWestLabel);
 
-    const northSouthLabel = createLabel("North-South Traffic", "#ff9800");
+    const northSouthLabel = createLabel("North-South Traffic", "#ff5722");
     northSouthLabel.position.set(18, 5, 0);
     scene.add(northSouthLabel);
 
@@ -973,48 +1007,51 @@ function buildNorthSouthIngressModel() {
 
     // --- Route Table HTML for North-South Ingress Model ---
     const edgeVpcRouteTable = `
-        <b>Edge (Ingress) VPC Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → Firewall Subnet</li>
-            <li>Spoke VPC CIDRs → TGW</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Edge (Ingress) VPC Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>Firewall Subnet (subnet-0abc1234)</td></tr>
+                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
+            </tbody>
+        </table>
     `;
     const spokeVpcRouteTable = `
-        <b>Spoke VPC Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → TGW (for outbound)</li>
-            <li>Local VPC CIDR → Local</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Spoke VPC Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>TGW (tgw-0def5678)</td></tr>
+                <tr><td>10.2.0.0/16</td><td>local</td></tr>
+            </tbody>
+        </table>
     `;
     const firewallSubnetTable = `
-        <b>Firewall Subnet Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → Firewall Endpoint</li>
-            <li>Spoke VPC CIDRs → TGW</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Firewall Subnet Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>Firewall Endpoint (vpce-c)</td></tr>
+                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
+            </tbody>
+        </table>
     `;
     const firewallEndpointTable = `
-        <b>Firewall Endpoint</b>
-        <ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Firewall Endpoint</div>
+        <ul style="margin:0 0 0 16px;padding:0;">
             <li>Stateful/Stateless Rules</li>
             <li>HOME_NET: Spoke VPC CIDRs</li>
-            <li>Inspect inbound traffic from internet</li>
-            <li>Inspect outbound traffic to internet</li>
-        </ul>
-    `;
-    const workloadSubnetTable = `
-        <b>Workload Subnet Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → TGW</li>
-            <li>Local VPC CIDR → Local</li>
+            <li>Inspect inbound/outbound traffic</li>
         </ul>
     `;
     const igwRouteTable = `
-        <b>IGW Route Table</b>
-        <ul>
-            <li>All traffic → Firewall Endpoint</li>
-            <li>Forces all inbound traffic through inspection</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">IGW Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>Firewall Endpoint (vpce-c)</td></tr>
+            </tbody>
+        </table>
     `;
 
     // --- North-South Ingress Model Layout ---
@@ -1240,43 +1277,58 @@ function buildCentralizedDedicatedModel() {
 
     // --- Route Table HTML for Centralized Dedicated Model ---
     const inspectionVpcRouteTable = `
-        <b>Inspection VPC Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → Firewall Subnet</li>
-            <li>Spoke VPC CIDRs → TGW</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Inspection VPC Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>Firewall Subnet (subnet-0abc1234)</td></tr>
+                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
+            </tbody>
+        </table>
     `;
     const egressVpcRouteTable = `
-        <b>Egress VPC Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → Firewall Subnet</li>
-            <li>Spoke VPC CIDRs → TGW</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Egress VPC Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>Firewall Subnet (subnet-0abc1234)</td></tr>
+                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
+            </tbody>
+        </table>
     `;
     const spokeVpcRouteTable = `
-        <b>Spoke VPC Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → TGW</li>
-            <li>Local VPC CIDR → Local</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Spoke VPC Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>TGW (tgw-0def5678)</td></tr>
+                <tr><td>10.2.0.0/16</td><td>local</td></tr>
+            </tbody>
+        </table>
     `;
     const inspectionFirewallSubnetTable = `
-        <b>Inspection Firewall Subnet Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → Firewall Endpoint</li>
-            <li>Spoke VPC CIDRs → TGW</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Inspection Firewall Subnet Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>Firewall Endpoint (vpce-d)</td></tr>
+                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
+            </tbody>
+        </table>
     `;
     const egressFirewallSubnetTable = `
-        <b>Egress Firewall Subnet Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → Firewall Endpoint</li>
-            <li>Spoke VPC CIDRs → TGW</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Egress Firewall Subnet Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>Firewall Endpoint (vpce-e)</td></tr>
+                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
+            </tbody>
+        </table>
     `;
     const inspectionFirewallTable = `
-        <b>Inspection Firewall Endpoint</b>
-        <ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Inspection Firewall Endpoint</div>
+        <ul style="margin:0 0 0 16px;padding:0;">
             <li>Stateful/Stateless Rules</li>
             <li>HOME_NET: All VPC CIDRs</li>
             <li>Dedicated East-West inspection</li>
@@ -1284,8 +1336,8 @@ function buildCentralizedDedicatedModel() {
         </ul>
     `;
     const egressFirewallTable = `
-        <b>Egress Firewall Endpoint</b>
-        <ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Egress Firewall Endpoint</div>
+        <ul style="margin:0 0 0 16px;padding:0;">
             <li>Stateful/Stateless Rules</li>
             <li>HOME_NET: All VPC CIDRs</li>
             <li>Dedicated North-South inspection</li>
@@ -1293,19 +1345,24 @@ function buildCentralizedDedicatedModel() {
         </ul>
     `;
     const workloadSubnetTable = `
-        <b>Workload Subnet Route Table</b>
-        <ul>
-            <li>0.0.0.0/0 → TGW</li>
-            <li>Local VPC CIDR → Local</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">Workload Subnet Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>TGW (tgw-0def5678)</td></tr>
+                <tr><td>10.2.0.0/16</td><td>local</td></tr>
+            </tbody>
+        </table>
     `;
     const natGatewayTable = `
-        <b>NAT Gateway Route Table</b>
-        <ul>
-            <li>Enables outbound internet for private subnets</li>
-            <li>Located in central egress VPC</li>
-            <li>Shared by multiple spoke VPCs</li>
-        </ul>
+        <div style="margin-bottom:8px;font-weight:bold;">NAT Gateway Route Table</div>
+        <table class="route-table">
+            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
+            <tbody>
+                <tr><td>0.0.0.0/0</td><td>Internet Gateway (igw-0a1b2c3d)</td></tr>
+                <tr><td>10.2.0.0/16</td><td>local</td></tr>
+            </tbody>
+        </table>
     `;
 
     // --- Centralized Dedicated Model Layout ---
