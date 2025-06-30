@@ -4,18 +4,23 @@ const path = require('path');
 let mainWindow;
 
 function createWindow() {
-  // Create the browser window
+  // Create the browser window with proper security settings
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 1000,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      enableRemoteModule: true
+      nodeIntegration: false,
+      contextIsolation: true,
+      enableRemoteModule: false,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      experimentalFeatures: false,
+      preload: path.join(__dirname, 'preload.js')
     },
     icon: path.join(__dirname, '../assets/icon.png'),
     titleBarStyle: 'default',
-    show: false
+    show: false,
+    title: 'AWS Network Firewall 3D Simulator'
   });
 
   // Load the app
@@ -24,7 +29,10 @@ function createWindow() {
   // Show window when ready to prevent visual flash
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    mainWindow.webContents.openDevTools();
+    // Only open dev tools in development
+    if (process.env.NODE_ENV === 'development') {
+      mainWindow.webContents.openDevTools();
+    }
   });
 
   // Handle window closed
@@ -45,14 +53,18 @@ function createMenu() {
           label: 'New Diagram',
           accelerator: 'CmdOrCtrl+N',
           click: () => {
-            mainWindow.webContents.send('new-diagram');
+            if (mainWindow) {
+              mainWindow.webContents.send('new-diagram');
+            }
           }
         },
         {
           label: 'Save Diagram',
           accelerator: 'CmdOrCtrl+S',
           click: () => {
-            mainWindow.webContents.send('save-diagram');
+            if (mainWindow) {
+              mainWindow.webContents.send('save-diagram');
+            }
           }
         },
         { type: 'separator' },
@@ -96,19 +108,41 @@ function createMenu() {
         {
           label: 'Centralized',
           click: () => {
-            mainWindow.webContents.send('load-template', 'centralized');
+            if (mainWindow) {
+              mainWindow.webContents.send('load-template', 'centralized');
+            }
           }
         },
         {
           label: 'Decentralized',
           click: () => {
-            mainWindow.webContents.send('load-template', 'decentralized');
+            if (mainWindow) {
+              mainWindow.webContents.send('load-template', 'decentralized');
+            }
           }
         },
         {
           label: 'Combined',
           click: () => {
-            mainWindow.webContents.send('load-template', 'combined');
+            if (mainWindow) {
+              mainWindow.webContents.send('load-template', 'combined');
+            }
+          }
+        },
+        {
+          label: 'North-South Ingress',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('load-template', 'north-south-ingress');
+            }
+          }
+        },
+        {
+          label: 'Centralized Dedicated',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('load-template', 'centralized-dedicated');
+            }
           }
         }
       ]
@@ -119,7 +153,9 @@ function createMenu() {
         {
           label: 'About',
           click: () => {
-            mainWindow.webContents.send('show-about');
+            if (mainWindow) {
+              mainWindow.webContents.send('show-about');
+            }
           }
         }
       ]
@@ -168,4 +204,25 @@ app.on('web-contents-created', (event, contents) => {
   contents.on('new-window', (event, navigationUrl) => {
     event.preventDefault();
   });
-}); 
+  
+  // Prevent navigation to external URLs
+  contents.on('will-navigate', (event, navigationUrl) => {
+    const parsedUrl = new URL(navigationUrl);
+    if (parsedUrl.origin !== 'file://') {
+      event.preventDefault();
+    }
+  });
+  
+  // Prevent redirects to external URLs
+  contents.on('will-redirect', (event, navigationUrl) => {
+    const parsedUrl = new URL(navigationUrl);
+    if (parsedUrl.origin !== 'file://') {
+      event.preventDefault();
+    }
+  });
+});
+
+// Set app name for macOS
+if (process.platform === 'darwin') {
+  app.setName('AWS Network Firewall 3D Simulator');
+} 

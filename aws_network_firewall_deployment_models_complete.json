@@ -1,0 +1,205 @@
+{
+    "version": "2025-06-30",
+    "source": "Deployment models for AWS Network Firewall (AWS Blog, 2020\u201111\u201117, updated 2021\u201109\u201110)",
+    "glossary": {
+        "VPC": "Amazon Virtual Private Cloud",
+        "IGW": "Internet Gateway",
+        "NAT_Gateway": "Managed Network Address Translation gateway",
+        "TGW": "AWS Transit Gateway",
+        "Firewall_Endpoint": "Elastic Network Interface created by AWS Network Firewall inside a subnet",
+        "Inspection_VPC": "Dedicated VPC housing firewall endpoints and TGW attachments for centralized inspection",
+        "Spoke_VPC": "Application VPC attached to a TGW",
+        "HOME_NET": "Rule\u2011engine variable containing internal CIDR ranges to be inspected",
+        "AZ": "Availability Zone"
+    },
+    "models": [
+        {
+            "model": "Distributed",
+            "description": "Each protected VPC contains its own AWS Network Firewall endpoints. Scope is per\u2011VPC; no TGW required.",
+            "sub_models": [
+                {
+                    "name": "Public Subnet Internet Egress",
+                    "use_case": [
+                        "Protect workload EC2 instances with public IPs that egress directly via IGW"
+                    ],
+                    "components": [
+                        "Workload subnet (public)",
+                        "Firewall subnet",
+                        "IGW"
+                    ],
+                    "routing": {
+                        "traffic_flow": "Instance \u2192 Firewall_Endpoint \u2192 IGW (egress) and IGW \u2192 Firewall_Endpoint \u2192 Instance (ingress via Ingress Routing)"
+                    },
+                    "route_tables": {
+                        "workload_subnet_rt": {
+                            "0.0.0.0/0": "Firewall_Endpoint_AZ"
+                        },
+                        "firewall_subnet_rt": {
+                            "0.0.0.0/0": "igw\u2011id"
+                        },
+                        "igw_ingress_rt": {
+                            "Workload_Subnet_CIDR": "Firewall_Endpoint_AZ"
+                        }
+                    },
+                    "pros": [
+                        "Keeps source IPs",
+                        "Small blast radius"
+                    ],
+                    "cons": [
+                        "One firewall per VPC increases cost"
+                    ]
+                },
+                {
+                    "name": "ALB / NAT Gateway Protection",
+                    "use_case": [
+                        "Inspect traffic between ALB or NAT Gateway and the Internet"
+                    ],
+                    "components": [
+                        "ALB or NAT Gateway in protected public subnet",
+                        "Firewall subnet",
+                        "IGW"
+                    ],
+                    "routing": {
+                        "traffic_flow": "Client \u2194 IGW \u2194 Firewall_Endpoint \u2194 ALB/NAT GW \u2194 Private targets"
+                    },
+                    "notes": {
+                        "source_ip_visibility": "Source IP to workload is NAT\u2019d by ALB/NAT GW; use centralized model if original IP required"
+                    }
+                }
+            ],
+            "constraints": [
+                "Cannot inspect VPC\u2011to\u2011VPC or on\u2011prem flows"
+            ],
+            "cost_note": "Cost = one AWS Network Firewall endpoint per AZ per VPC"
+        },
+        {
+            "model": "Centralized",
+            "description": "Single Inspection VPC with firewalls; all traffic steered through TGW attachments.",
+            "requirements": [
+                "TGW with appliance mode enabled",
+                "Inspection VPC with two subnets per AZ (TGW attachment + Firewall)"
+            ],
+            "sub_models": [
+                {
+                    "name": "East\u2011West VPC\u2011to\u2011VPC",
+                    "use_case": [
+                        "Inspect traffic between any two spoke VPCs in same or different Regions"
+                    ],
+                    "components": [
+                        "TGW",
+                        "Inspection_VPC",
+                        "Firewall_Endpoint",
+                        "TGW route tables: Spoke_RT, Firewall_RT"
+                    ],
+                    "routing": {
+                        "spoke_rt": {
+                            "0.0.0.0/0": "TGW\u2011Attachment_Inspection_VPC"
+                        },
+                        "firewall_rt": {
+                            "Spoke_VPC_CIDRs": "TGW\u2011Attachment_Spoke"
+                        },
+                        "inspection_vpc_subnet_rt": {
+                            "0.0.0.0/0": "Firewall_Endpoint_AZ"
+                        },
+                        "inspection_return_rt": {
+                            "0.0.0.0/0": "tgw\u2011id"
+                        }
+                    }
+                },
+                {
+                    "name": "North\u2011South On\u2011Prem via DX/VPN",
+                    "use_case": [
+                        "Inspect VPC \u2194 on\u2011prem traffic"
+                    ],
+                    "components": [
+                        "DX Gateway or VPN",
+                        "TGW",
+                        "Inspection_VPC"
+                    ],
+                    "routing": {
+                        "dx_vpn_attachment": "Attached to Spoke_RT like a VPC",
+                        "return_path": "Routes propagated to Firewall_RT"
+                    }
+                },
+                {
+                    "name": "Centralized Internet Egress",
+                    "use_case": [
+                        "Private subnets in Spoke VPCs reach Internet via central NAT"
+                    ],
+                    "components": [
+                        "Central Egress VPC with NAT GW",
+                        "TGW",
+                        "Inspection_VPC"
+                    ],
+                    "routing": {
+                        "flow": "Spoke VPC \u2192 TGW \u2192 Inspection_VPC(Firewall) \u2192 TGW \u2192 Egress VPC \u2192 NAT GW \u2192 IGW"
+                    }
+                },
+                {
+                    "name": "Centralized Internet Ingress",
+                    "use_case": [
+                        "External clients reach workloads through ALB/NLB or reverse\u2011proxy"
+                    ],
+                    "components": [
+                        "Ingress VPC with ALB/NLB",
+                        "TGW",
+                        "Inspection_VPC"
+                    ],
+                    "routing": {
+                        "flow": "Client \u2192 IGW \u2192 ALB \u2192 TGW \u2192 Inspection_VPC(Firewall) \u2192 TGW \u2192 Spoke VPC"
+                    },
+                    "notes": {
+                        "source_ip": "Client IP lost at ALB level"
+                    }
+                }
+            ],
+            "pros": [
+                "Central rule set, full IP visibility"
+            ],
+            "cons": [
+                "TGW data processing cost",
+                "Requires careful RT design"
+            ]
+        },
+        {
+            "model": "Combined",
+            "description": "Blend of centralized inspection for East\u2011West plus per\u2011VPC firewalls for specific Internet paths.",
+            "sub_models": [
+                {
+                    "name": "Spoke VPC with Local IGW",
+                    "use_case": [
+                        "Some VPCs need direct Internet ingress/egress"
+                    ],
+                    "routing": {
+                        "flow": "Public subnet \u2192 Local Firewall_Endpoint \u2192 IGW"
+                    },
+                    "note": "East\u2011West traffic from same VPC still goes via TGW + Inspection_VPC"
+                },
+                {
+                    "name": "Dual Inspection (East\u2011West + Centralized Egress VPC)",
+                    "use_case": [
+                        "Separate firewall set for East\u2011West and for Internet egress to lower TGW data hops"
+                    ],
+                    "components": [
+                        "Inspection_VPC (EW)",
+                        "Egress_VPC with firewall"
+                    ],
+                    "routing": {
+                        "internet_flow": "Spoke VPC \u2192 TGW \u2192 Egress_VPC(Firewall) \u2192 NAT/IGW"
+                    }
+                }
+            ],
+            "tradeoffs": {
+                "complexity": "High",
+                "cost": "Optimized if many VPCs"
+            }
+        }
+    ],
+    "global_considerations": [
+        "Deploy firewall subnet in every AZ used by workloads",
+        "Inspection_VPC should contain no workloads",
+        "HOME_NET must include all internal CIDRs in centralized designs",
+        "AWS Network Firewall cannot sit between VPC peering or VGW attachments without TGW",
+        "Firewall endpoint is HA within AZ; design for cross\u2011AZ HA by one subnet per AZ"
+    ]
+}

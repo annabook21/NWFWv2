@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; connect-src 'self' https:;">
     <title>AWS Network Firewall 3D Simulator</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script type="importmap">
         {
             "imports": {
@@ -14,19 +16,382 @@
         }
     </script>
 </head>
-<body style="margin:0;overflow:hidden;">
-    <div id="model-selector" style="position:absolute;top:20px;left:20px;z-index:10;background:rgba(255,255,255,0.9);padding:10px 18px;border-radius:8px;box-shadow:0 2px 8px #0002;">
-        <label for="modelSelect"><b>Deployment Model:</b></label>
-        <select id="modelSelect">
-            <option value="centralized">Centralized</option>
-            <option value="decentralized">Decentralized</option>
-            <option value="combined">Combined</option>
-            <option value="north-south-ingress">North-South Ingress</option>
-            <option value="centralized-dedicated">Centralized Dedicated</option>
-        </select>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <h1><i class="fas fa-shield-alt"></i> AWS Network Firewall 3D Simulator</h1>
+                <p>Interactive 3D Architecture Design & Learning Platform</p>
+            </div>
+            <div class="mode-controls">
+                <button class="mode-btn" id="viewMode" data-mode="view">
+                    <i class="fas fa-eye"></i> View Mode
+                </button>
+                <button class="mode-btn active" id="designMode" data-mode="design">
+                    <i class="fas fa-pencil-alt"></i> Design Mode
+                </button>
+                <button class="mode-btn" id="simulateMode" data-mode="simulate">
+                    <i class="fas fa-play"></i> Simulate
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Left Sidebar -->
+        <aside class="sidebar left-sidebar">
+            <button class="sidebar-toggle" id="leftSidebarToggle" title="Toggle Left Sidebar">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            
+            <!-- Deployment Models Panel -->
+            <div class="panel">
+                <h3><i class="fas fa-sitemap"></i> Deployment Models</h3>
+                <div class="model-grid">
+                    <button class="model-btn" data-model="centralized">
+                        <div class="model-emoji">🏢</div>
+                        <div class="model-name">Centralized</div>
+                        <small>Single firewall for all traffic</small>
+                    </button>
+                    <button class="model-btn" data-model="decentralized">
+                        <div class="model-emoji">🏘️</div>
+                        <div class="model-name">Decentralized</div>
+                        <small>Firewall per VPC</small>
+                    </button>
+                    <button class="model-btn" data-model="combined">
+                        <div class="model-emoji">🔗</div>
+                        <div class="model-name">Combined</div>
+                        <small>Hybrid approach</small>
+                    </button>
+                    <button class="model-btn" data-model="north-south-ingress">
+                        <div class="model-emoji">⬇️</div>
+                        <div class="model-name">North-South Ingress</div>
+                        <small>Ingress traffic control</small>
+                    </button>
+                    <button class="model-btn" data-model="centralized-dedicated">
+                        <div class="model-emoji">🎯</div>
+                        <div class="model-name">Centralized Dedicated</div>
+                        <small>Dedicated firewall VPC</small>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Component Library -->
+            <div class="panel">
+                <h3><i class="fas fa-cube"></i> 3D Component Library</h3>
+                <div class="component-library">
+                    <div class="component-item" data-component="vpc">
+                        <div class="component-icon">🏠</div>
+                        <div class="component-name">VPC</div>
+                    </div>
+                    <div class="component-item" data-component="subnet">
+                        <div class="component-icon">📦</div>
+                        <div class="component-name">Subnet</div>
+                    </div>
+                    <div class="component-item" data-component="firewall">
+                        <div class="component-icon">🛡️</div>
+                        <div class="component-name">Firewall</div>
+                    </div>
+                    <div class="component-item" data-component="internet-gateway">
+                        <div class="component-icon">🌐</div>
+                        <div class="component-name">Internet Gateway</div>
+                    </div>
+                    <div class="component-item" data-component="nat-gateway">
+                        <div class="component-icon">🔄</div>
+                        <div class="component-name">NAT Gateway</div>
+                    </div>
+                    <div class="component-item" data-component="route-table">
+                        <div class="component-icon">🗺️</div>
+                        <div class="component-name">Route Table</div>
+                    </div>
+                    <div class="component-item" data-component="security-group">
+                        <div class="component-icon">🔒</div>
+                        <div class="component-name">Security Group</div>
+                    </div>
+                    <div class="component-item" data-component="load-balancer">
+                        <div class="component-icon">⚖️</div>
+                        <div class="component-name">Load Balancer</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Configuration Panel -->
+            <div class="panel">
+                <h3><i class="fas fa-cog"></i> 3D Configuration</h3>
+                <div class="config-group">
+                    <label for="trafficType">Traffic Type:</label>
+                    <select id="trafficType">
+                        <option value="normal">Normal Traffic</option>
+                        <option value="malicious">Malicious Traffic</option>
+                        <option value="ddos">DDoS Attack</option>
+                        <option value="data-exfiltration">Data Exfiltration</option>
+                    </select>
+                </div>
+                <div class="config-group">
+                    <label for="animationSpeed">Animation Speed:</label>
+                    <select id="animationSpeed">
+                        <option value="slow">Slow</option>
+                        <option value="normal" selected>Normal</option>
+                        <option value="fast">Fast</option>
+                    </select>
+                </div>
+                <div class="config-group">
+                    <label>
+                        <input type="checkbox" id="showRouteTables" checked>
+                        Show Route Tables
+                    </label>
+                </div>
+                <div class="config-group">
+                    <label>
+                        <input type="checkbox" id="showTrafficFlow" checked>
+                        Show 3D Traffic Flow
+                    </label>
+                </div>
+                <div class="config-group">
+                    <label>
+                        <input type="checkbox" id="showWireframe" checked>
+                        Show Wireframe
+                    </label>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Canvas Container -->
+        <main class="canvas-container">
+            <!-- Toolbar -->
+            <div class="toolbar">
+                <div class="toolbar-group">
+                    <button class="toolbar-btn" id="zoomIn" title="Zoom In">
+                        <i class="fas fa-search-plus"></i>
+                    </button>
+                    <button class="toolbar-btn" id="zoomOut" title="Zoom Out">
+                        <i class="fas fa-search-minus"></i>
+                    </button>
+                    <button class="toolbar-btn" id="resetView" title="Reset View">
+                        <i class="fas fa-home"></i>
+                    </button>
+                    <button class="toolbar-btn" id="toggleWireframe" title="Toggle Wireframe">
+                        <i class="fas fa-cube"></i>
+                    </button>
+                </div>
+                <div class="toolbar-group">
+                    <button class="toolbar-btn" id="clearCanvas" title="Clear Canvas">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                    <button class="toolbar-btn" id="exportImage" title="Export as Image">
+                        <i class="fas fa-download"></i>
+                    </button>
+                    <button class="toolbar-btn" id="saveProject" title="Save Project">
+                        <i class="fas fa-save"></i>
+                    </button>
+                </div>
+                <div class="toolbar-group">
+                    <button class="toolbar-btn" id="helpBtn" title="Help">
+                        <i class="fas fa-question-circle"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3D Canvas -->
+            <div id="canvas-3d" class="canvas-3d"></div>
+
+            <!-- Animation Controls -->
+            <div class="animation-controls">
+                <button class="simulate-btn" id="startSimulation">
+                    <i class="fas fa-play"></i> Start 3D Simulation
+                </button>
+                <button class="simulate-btn" id="stopSimulation" disabled>
+                    <i class="fas fa-stop"></i> Stop Simulation
+                </button>
+                <button class="simulate-btn" id="resetSimulation">
+                    <i class="fas fa-redo"></i> Reset
+                </button>
+            </div>
+        </main>
+
+        <!-- Right Sidebar -->
+        <aside class="sidebar right-sidebar">
+            <button class="sidebar-toggle" id="rightSidebarToggle" title="Toggle Right Sidebar">
+                <i class="fas fa-chevron-right"></i>
+            </button>
+            
+            <!-- Information Panel -->
+            <div class="panel">
+                <h3><i class="fas fa-info-circle"></i> 3D Information</h3>
+                <div class="info-content" id="infoContent">
+                    <h4>Welcome to AWS Network Firewall 3D Simulator</h4>
+                    <p>Select a deployment model to get started, or use the 3D component library to build your own architecture.</p>
+                    <ul>
+                        <li>Click 3D components to view details</li>
+                        <li>Drag to rotate and zoom the 3D view</li>
+                        <li>Use simulation mode to test 3D traffic flow</li>
+                        <li>Toggle wireframe mode for better visualization</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Route Tables Panel -->
+            <div class="panel route-tables">
+                <h3><i class="fas fa-route"></i> Route Tables</h3>
+                <div class="route-tables-content" id="routeTablesContent">
+                    <p>No route tables configured for this deployment model.</p>
+                </div>
+            </div>
+
+            <!-- Statistics Panel -->
+            <div class="panel">
+                <h3><i class="fas fa-chart-bar"></i> 3D Statistics</h3>
+                <div class="stats-content" id="statsContent">
+                    <div class="stat-item">
+                        <div class="stat-label">3D Components</div>
+                        <div class="stat-value" id="componentCount">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">VPCs</div>
+                        <div class="stat-value" id="vpcCount">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Firewalls</div>
+                        <div class="stat-value" id="firewallCount">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">3D Traffic Flow</div>
+                        <div class="stat-value" id="trafficFlow">0 packets/s</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tips Panel -->
+            <div class="panel">
+                <h3><i class="fas fa-lightbulb"></i> 3D Tips & Best Practices</h3>
+                <div class="tips-content" id="tipsContent">
+                    <div class="tip-item">
+                        <div class="tip-icon">💡</div>
+                        <p>Use 3D rotation to view architecture from all angles</p>
+                    </div>
+                    <div class="tip-item">
+                        <div class="tip-icon">🔒</div>
+                        <p>Place firewalls strategically in 3D space for optimal coverage</p>
+                    </div>
+                    <div class="tip-item">
+                        <div class="tip-icon">⚡</div>
+                        <p>Consider 3D layout for high availability and redundancy</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
     </div>
-    <div id="canvas-3d" class="canvas-3d" style="width:100vw;height:100vh;position:fixed;top:0;left:0;"></div>
-    <div id="route-table-panel" style="display:none;position:absolute;min-width:260px;max-width:400px;z-index:20;background:rgba(255,255,255,0.97);border-radius:10px;box-shadow:0 2px 12px #0003;padding:18px 22px;"></div>
+
+    <!-- Status Bar -->
+    <footer class="status-bar">
+        <div class="status-left">
+            <span id="currentModel">No model selected</span>
+        </div>
+        <div class="status-right">
+            <span id="mousePosition">Ready for 3D interaction</span>
+        </div>
+    </footer>
+
+    <!-- Modals -->
+    <div id="helpModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>AWS Network Firewall 3D Simulator Help</h2>
+            <h3>3D Controls</h3>
+            <ul>
+                <li><strong>Mouse:</strong> Left click and drag to rotate, right click to pan, scroll to zoom</li>
+                <li><strong>Touch:</strong> One finger to rotate, two fingers to pan and zoom</li>
+                <li><strong>Keyboard:</strong> Arrow keys for camera movement</li>
+            </ul>
+            <h3>Getting Started</h3>
+            <ul>
+                <li>Select a deployment model from the left sidebar</li>
+                <li>Use the 3D component library to add AWS resources</li>
+                <li>Click 3D components to view detailed information</li>
+                <li>Switch to simulation mode to test 3D traffic flow</li>
+            </ul>
+            <h3>Deployment Models</h3>
+            <ul>
+                <li><strong>Centralized:</strong> Single firewall for all VPCs</li>
+                <li><strong>Decentralized:</strong> Firewall per VPC</li>
+                <li><strong>Combined:</strong> Hybrid approach</li>
+                <li><strong>North-South Ingress:</strong> Ingress traffic control</li>
+                <li><strong>Centralized Dedicated:</strong> Dedicated firewall VPC</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Route Table Panel -->
+    <div id="routeTablePanel" class="route-info-panel">
+        <div class="route-info-header">
+            <h4 id="routeTableTitle">Route Table</h4>
+            <button class="close-route-btn">&times;</button>
+        </div>
+        <div id="routeTableContent"></div>
+    </div>
+
+    <!-- Route Table Modal -->
+    <div id="routeTableModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="routeTableTitle">Route Table</h3>
+                <span class="close close-route-btn">&times;</span>
+            </div>
+            <div id="routeTableContent"></div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <p id="loadingText">Loading 3D architecture...</p>
+            <div class="loading-progress">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <span id="progressText">0%</span>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="../renderer3d.js"></script>
+    <script>
+        // Fallback if Three.js fails to load
+        window.addEventListener('error', function(e) {
+            if (e.filename && e.filename.includes('three')) {
+                console.warn('Three.js failed to load, using fallback');
+                document.getElementById('canvas-3d').innerHTML = `
+                    <div style="
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        height: 100%;
+                        color: white;
+                        text-align: center;
+                        padding: 20px;
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        border-radius: 10px;
+                    ">
+                        <h2>🌐 Network Issue</h2>
+                        <p>Unable to load 3D components. This might be due to network connectivity or CDN issues.</p>
+                        <button onclick="location.reload()" style="
+                            background: #3498db;
+                            color: white;
+                            border: none;
+                            padding: 10px 20px;
+                            border-radius: 5px;
+                            cursor: pointer;
+                            margin-top: 10px;
+                        ">Try Again</button>
+                    </div>
+                `;
+                document.getElementById('loadingOverlay').style.display = 'none';
+            }
+        });
+    </script>
 </body>
 </html> 

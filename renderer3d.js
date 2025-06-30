@@ -1,1647 +1,1869 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-const container = document.getElementById('canvas-3d');   // create this div in HTML
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a2a3a);
+class NetworkFirewall3DSimulator {
+    constructor() {
+        try {
+            this.initializeAsync();
+        } catch (error) {
+            console.error('Failed to initialize 3D scene:', error);
+            this.showFallbackMessage();
+        }
+    }
 
-const camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
-camera.position.set(40, 40, 40);
+    async initializeAsync() {
+        await this.initialize3DScene();
+        
+        // Add tooltip functionality after initialization
+        if (!document.getElementById('component-tooltip')) {
+            const tooltip = document.createElement('div');
+            tooltip.id = 'component-tooltip';
+            tooltip.style.position = 'fixed';
+            tooltip.style.pointerEvents = 'none';
+            tooltip.style.background = 'white';
+            tooltip.style.color = '#222';
+            tooltip.style.padding = '6px 14px';
+            tooltip.style.borderRadius = '6px';
+            tooltip.style.boxShadow = '0 4px 16px rgba(0,0,0,0.18)';
+            tooltip.style.fontWeight = 'bold';
+            tooltip.style.fontSize = '15px';
+            tooltip.style.zIndex = 9999;
+            tooltip.style.display = 'none';
+            document.body.appendChild(tooltip);
+        }
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(container.clientWidth, container.clientHeight);
-container.appendChild(renderer.domElement);
+        this.renderer.domElement.addEventListener('mousemove', (event) => {
+            const tooltip = document.getElementById('component-tooltip');
+            const rect = this.renderer.domElement.getBoundingClientRect();
+            const mouse = {
+                x: ((event.clientX - rect.left) / rect.width) * 2 - 1,
+                y: -((event.clientY - rect.top) / rect.height) * 2 + 1
+            };
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, this.camera);
+            const intersects = raycaster.intersectObjects(this.scene.children, true);
+            let found = false;
+            for (const intersect of intersects) {
+                let obj = intersect.object;
+                while (obj && !obj.userData.label && obj.parent) obj = obj.parent;
+                if (obj && obj.userData && obj.userData.label) {
+                    tooltip.textContent = obj.userData.label;
+                    tooltip.style.left = event.clientX + 16 + 'px';
+                    tooltip.style.top = event.clientY + 8 + 'px';
+                    tooltip.style.display = 'block';
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                tooltip.style.display = 'none';
+            }
+        });
+        
+        this.renderer.domElement.addEventListener('mouseleave', () => {
+            const tooltip = document.getElementById('component-tooltip');
+            tooltip.style.display = 'none';
+        });
+    }
 
-// Controls
-let controls;
-try {
-    controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.target.set(0, 0, 0);
-} catch (e) {
-    console.warn('OrbitControls failed, falling back.', e);
-}
+    async initialize3DScene() {
+        this.updateLoadingProgress(10, 'Initializing 3D scene...');
+        await this.delay(200);
+        
+        this.container = document.getElementById('canvas-3d');
+        if (!this.container) {
+            throw new Error('Canvas container not found');
+        }
 
-// Lights
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-dirLight.position.set(20, 40, 20);
-scene.add(dirLight);
+        this.updateLoadingProgress(20, 'Setting up scene...');
+        await this.delay(200);
+        this.scene = new THREE.Scene();
+        // Open roof concept - transparent background
+        this.scene.background = null;
+        
+        this.updateLoadingProgress(30, 'Configuring camera...');
+        await this.delay(200);
+        this.camera = new THREE.PerspectiveCamera(60, this.container.clientWidth / this.container.clientHeight, 0.1, 1000);
+        this.camera.position.set(40, 40, 40);
+        
+        this.updateLoadingProgress(40, 'Initializing renderer...');
+        await this.delay(200);
+        this.renderer = new THREE.WebGLRenderer({ 
+            antialias: true,
+            alpha: true // Enable transparency
+        });
+        this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.setClearColor(0x000000, 0); // Transparent background
+        this.container.appendChild(this.renderer.domElement);
+        
+        this.updateLoadingProgress(50, 'Setting up controls...');
+        await this.delay(200);
+        // Controls
+        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+        this.controls.enableDamping = true;
+        this.controls.dampingFactor = 0.05;
+        this.controls.target.set(0, 0, 0);
+        this.controls.enablePan = true;
+        this.controls.enableZoom = true;
+        this.controls.enableRotate = true;
+        
+        this.updateLoadingProgress(60, 'Adding lighting...');
+        await this.delay(200);
+        // Lights
+        this.setupLights();
+        
+        this.updateLoadingProgress(70, 'Setting up helpers...');
+        await this.delay(200);
+        // Helpers
+        this.setupHelpers();
+        
+        this.updateLoadingProgress(80, 'Initializing state...');
+        await this.delay(200);
+        // State
+        this.currentMode = 'design';
+        this.currentModel = null;
+        this.simulationRunning = false;
+        this.trafficAnimations = [];
+        this.components = [];
+        this.routeTables = {};
+        this.wireframeMode = false;
+        this.selectedObject = null;
+        
+        this.updateLoadingProgress(90, 'Setting up event listeners...');
+        await this.delay(200);
+        // Initialize
+        this.initializeEventListeners();
+        
+        this.updateLoadingProgress(95, 'Starting animation loop...');
+        await this.delay(200);
+        this.animate();
+        this.updateStatistics();
+        
+        this.updateLoadingProgress(100, 'Ready!');
+        // Hide loading overlay after a short delay
+        setTimeout(() => {
+            this.hideLoading();
+        }, 500);
+    }
 
-// Helpers (grid & axes)
-const grid = new THREE.GridHelper(100, 20, 0x444444, 0x222222);
-scene.add(grid);
-const axes = new THREE.AxesHelper(10);
-scene.add(axes);
+    updateLoadingProgress(percent, message) {
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const loadingText = document.getElementById('loadingText');
+        
+        if (progressFill) progressFill.style.width = percent + '%';
+        if (progressText) progressText.textContent = percent + '%';
+        if (loadingText) loadingText.textContent = message;
+    }
 
-// Global array to track all subnet meshes for hover
-const allSubnetMeshes = [];
+    showFallbackMessage() {
+        const container = document.getElementById('canvas-3d');
+        if (container) {
+            container.innerHTML = `
+                <div style="
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    height: 100%;
+                    color: white;
+                    text-align: center;
+                    padding: 20px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    border-radius: 10px;
+                ">
+                    <h2>🚧 3D Renderer Unavailable</h2>
+                    <p>There was an issue loading the 3D components. Please try refreshing the page.</p>
+                    <button onclick="location.reload()" style="
+                        background: #3498db;
+                        color: white;
+                        border: none;
+                        padding: 10px 20px;
+                        border-radius: 5px;
+                        cursor: pointer;
+                        margin-top: 10px;
+                    ">Refresh Page</button>
+                </div>
+            `;
+        }
+        this.hideLoading();
+    }
 
-// ================= Utility Functions =================
-function clearScene() {
-    // Preserve camera, lights, grid, axes
-    const preserve = new Set([grid.uuid, dirLight.uuid, axes.uuid]);
-    scene.children.slice().forEach(obj => {
-        if (!preserve.has(obj.uuid) && !(obj instanceof THREE.Camera) && obj !== grid && obj !== dirLight && obj !== axes) {
-            scene.remove(obj);
+    setupLights() {
+        // Ambient light
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        this.scene.add(ambientLight);
+        
+        // Directional light
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(20, 40, 20);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        this.scene.add(dirLight);
+        
+        // Point lights for better 3D effect
+        const pointLight1 = new THREE.PointLight(0x3498db, 0.5, 50);
+        pointLight1.position.set(30, 30, 30);
+        this.scene.add(pointLight1);
+        
+        const pointLight2 = new THREE.PointLight(0xe74c3c, 0.3, 50);
+        pointLight2.position.set(-30, 30, -30);
+        this.scene.add(pointLight2);
+    }
+
+    setupHelpers() {
+        // Subtle grid for open roof concept
+        const grid = new THREE.GridHelper(100, 20, 0x3498db, 0x2980b9);
+        grid.material.opacity = 0.3;
+        grid.material.transparent = true;
+        this.scene.add(grid);
+        
+        // Axes helper (optional)
+        const axes = new THREE.AxesHelper(10);
+        axes.material.opacity = 0.5;
+        axes.material.transparent = true;
+        this.scene.add(axes);
+    }
+
+    initializeEventListeners() {
+        // Mode switching
+        document.querySelectorAll('.mode-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const mode = e.target.closest('.mode-btn').dataset.mode;
+                this.setMode(mode);
+            });
+        });
+
+        // Model selection
+        document.querySelectorAll('.model-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const model = e.target.closest('.model-btn').dataset.model;
+                this.loadDeploymentModel(model);
+            });
+        });
+
+        // Component library
+        document.querySelectorAll('.component-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                const componentType = e.target.closest('.component-item').dataset.component;
+                this.addComponent(componentType);
+            });
+        });
+
+        // Toolbar buttons
+        document.getElementById('zoomIn')?.addEventListener('click', () => this.zoomIn());
+        document.getElementById('zoomOut')?.addEventListener('click', () => this.zoomOut());
+        document.getElementById('resetView')?.addEventListener('click', () => this.resetView());
+        document.getElementById('toggleWireframe')?.addEventListener('click', () => this.toggleWireframe());
+        document.getElementById('clearCanvas')?.addEventListener('click', () => this.clearScene());
+        document.getElementById('exportImage')?.addEventListener('click', () => this.exportImage());
+        document.getElementById('saveProject')?.addEventListener('click', () => this.saveProject());
+        document.getElementById('helpBtn')?.addEventListener('click', () => this.showHelp());
+
+        // Simulation controls
+        document.getElementById('startSimulation')?.addEventListener('click', () => this.startSimulation());
+        document.getElementById('stopSimulation')?.addEventListener('click', () => this.stopSimulation());
+        document.getElementById('resetSimulation')?.addEventListener('click', () => this.resetSimulation());
+
+        // Configuration controls
+        document.getElementById('trafficType')?.addEventListener('change', (e) => this.updateTrafficType(e.target.value));
+        document.getElementById('animationSpeed')?.addEventListener('change', (e) => this.updateAnimationSpeed(e.target.value));
+        document.getElementById('showRouteTables')?.addEventListener('change', (e) => this.toggleRouteTables(e.target.checked));
+        document.getElementById('showTrafficFlow')?.addEventListener('change', (e) => this.toggleTrafficFlow(e.target.checked));
+
+        // Sidebar toggle buttons
+        document.getElementById('leftSidebarToggle')?.addEventListener('click', () => this.toggleSidebar('left'));
+        document.getElementById('rightSidebarToggle')?.addEventListener('click', () => this.toggleSidebar('right'));
+
+        // Modal controls
+        document.querySelector('.close')?.addEventListener('click', () => this.hideHelp());
+        document.querySelector('.close-route-btn')?.addEventListener('click', () => {
+            document.getElementById('routeTablePanel').style.display = 'none';
+        });
+
+        // Canvas interaction
+        this.renderer.domElement.addEventListener('click', (event) => this.onMouseClick(event));
+        this.renderer.domElement.addEventListener('mousemove', (event) => this.onMouseMove(event));
+
+        // Window resize
+        window.addEventListener('resize', () => this.onWindowResize());
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                switch (e.key) {
+                    case 's':
+                        e.preventDefault();
+                        this.saveProject();
+                        break;
+                    case 'e':
+                        e.preventDefault();
+                        this.exportImage();
+                        break;
+                    case 'h':
+                        e.preventDefault();
+                        this.showHelp();
+                        break;
+                }
+            }
+        });
+    }
+
+    toggleSidebar(side) {
+        const sidebar = document.querySelector(`.${side}-sidebar`);
+        const toggleBtn = document.getElementById(`${side}SidebarToggle`);
+        const icon = toggleBtn.querySelector('i');
+        
+        if (sidebar.classList.contains('collapsed')) {
+            // Expand
+            sidebar.classList.remove('collapsed');
+            sidebar.classList.add('expanded');
+            if (side === 'left') {
+                icon.className = 'fas fa-chevron-left';
+            } else {
+                icon.className = 'fas fa-chevron-right';
+            }
+        } else if (sidebar.classList.contains('expanded')) {
+            // Collapse
+            sidebar.classList.remove('expanded');
+            sidebar.classList.add('collapsed');
+            if (side === 'left') {
+                icon.className = 'fas fa-chevron-right';
+            } else {
+                icon.className = 'fas fa-chevron-left';
+            }
+        } else {
+            // Default to expanded
+            sidebar.classList.add('expanded');
+            if (side === 'left') {
+                icon.className = 'fas fa-chevron-left';
+            } else {
+                icon.className = 'fas fa-chevron-right';
+            }
+        }
+        
+        // Trigger resize to adjust canvas
+        setTimeout(() => {
+            this.onWindowResize();
+        }, 300);
+    }
+
+    setMode(mode) {
+        this.currentMode = mode;
+        
+        // Update UI
+        document.querySelectorAll('.mode-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.querySelector(`[data-mode="${mode}"]`).classList.add('active');
+        
+        // Update information panel
+        this.updateInfoPanel(mode);
+    }
+
+    updateInfoPanel(mode) {
+        const infoContent = document.getElementById('infoContent');
+        
+        const modeInfo = {
+            view: {
+                title: '3D View Mode',
+                description: 'Explore and examine the current 3D architecture. Click components to view details.',
+                tips: [
+                    'Click 3D components to view detailed information',
+                    'Drag to rotate, scroll to zoom, right-click to pan',
+                    'View route tables and configurations in 3D space'
+                ]
+            },
+            design: {
+                title: '3D Design Mode',
+                description: 'Build and modify your 3D network architecture. Add components and configure settings.',
+                tips: [
+                    'Use the 3D component library to add AWS resources',
+                    'Position components in 3D space for optimal layout',
+                    'Use the configuration panel to adjust 3D settings'
+                ]
+            },
+            simulate: {
+                title: '3D Simulation Mode',
+                description: 'Test 3D traffic flow and security scenarios. Watch how data moves through your architecture.',
+                tips: [
+                    'Start 3D simulation to see traffic flow',
+                    'Change traffic type to test different scenarios',
+                    'Monitor 3D statistics and performance'
+                ]
+            }
+        };
+        
+        const info = modeInfo[mode];
+        infoContent.innerHTML = `
+            <h4>${info.title}</h4>
+            <p>${info.description}</p>
+            <ul>
+                ${info.tips.map(tip => `<li>${tip}</li>`).join('')}
+            </ul>
+        `;
+    }
+
+    loadDeploymentModel(modelName) {
+        this.showLoading();
+        
+        // Update UI
+        document.querySelectorAll('.model-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.querySelector(`[data-model="${modelName}"]`).classList.add('active');
+        
+        document.getElementById('currentModel').textContent = modelName.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase());
+        
+        // Clear existing components
+        this.clearScene();
+        
+        // Load model
+        setTimeout(() => {
+            this.buildDeploymentModel(modelName);
+            this.hideLoading();
+            this.updateStatistics();
+        }, 500);
+    }
+
+    buildDeploymentModel(modelName) {
+        console.log('Building deployment model:', modelName);
+        
+        // Clear route tables before building new model
+        this.routeTables = {};
+        
+        switch (modelName) {
+            case 'centralized':
+                this.buildCentralizedModel();
+                break;
+            case 'decentralized':
+                this.buildDecentralizedModel();
+                break;
+            case 'combined':
+                this.buildCombinedModel();
+                break;
+            case 'north-south-ingress':
+                this.buildNorthSouthIngressModel();
+                break;
+            case 'centralized-dedicated':
+                this.buildCentralizedDedicatedModel();
+                break;
+            default:
+                console.warn('Unknown deployment model:', modelName);
+                return;
+        }
+        
+        // Update route tables display after building model
+        setTimeout(() => {
+            this.updateRouteTablesDisplay();
+        }, 100);
+        
+        this.updateStatistics();
+        console.log('Deployment model built successfully');
+    }
+
+    buildCentralizedModel() {
+        // Clear existing components
+        this.clearScene();
+        
+        // CENTRALIZED MODEL: Single Inspection VPC with TGW
+        // Based on official AWS documentation
+        
+        // Create Transit Gateway (required for centralized model)
+        const tgw = this.createTransitGateway(0, 0, 0, 'Transit Gateway');
+        
+        // Create Inspection VPC (dedicated for firewall endpoints)
+        const inspectionVPC = this.createVPC(0, 0, 10, 'Inspection VPC (100.64.0.0/16)', '#e74c3c');
+        
+        // Inspection VPC subnets per AZ (TGW attachment + Firewall)
+        const tgwSubnetA = this.createSubnet(-2, 0, 10, 'TGW Subnet AZ-A', '#9b59b6', inspectionVPC);
+        const firewallSubnetA = this.createSubnet(2, 0, 10, 'Firewall Subnet AZ-A', '#e74c3c', inspectionVPC);
+        const firewallEndpointA = this.createFirewall(2, 2, 10, 'Firewall Endpoint AZ-A');
+        
+        // Create Spoke VPCs (application VPCs)
+        const spokeVPC1 = this.createVPC(-15, 0, 0, 'Spoke VPC A (10.1.0.0/16)', '#3498db');
+        const workloadSubnet1 = this.createSubnet(-15, 0, 0, 'Workload Subnet', '#27ae60', spokeVPC1);
+        
+        const spokeVPC2 = this.createVPC(15, 0, 0, 'Spoke VPC B (10.2.0.0/16)', '#f39c12');
+        const workloadSubnet2 = this.createSubnet(15, 0, 0, 'Workload Subnet', '#27ae60', spokeVPC2);
+        
+        // Connections
+        this.createConnection(tgw, inspectionVPC, '#e74c3c');
+        this.createConnection(tgw, spokeVPC1, '#3498db');
+        this.createConnection(tgw, spokeVPC2, '#f39c12');
+        
+        // Route Tables per AWS documentation
+        this.createRouteTable(tgw, 'Spoke Route Table', [
+            { destination: '0.0.0.0/0', target: 'TGW-Attachment_Inspection_VPC', type: 'inspection' }
+        ]);
+        
+        this.createRouteTable(inspectionVPC, 'Firewall Route Table', [
+            { destination: '10.1.0.0/16', target: 'TGW-Attachment_Spoke_A', type: 'spoke' },
+            { destination: '10.2.0.0/16', target: 'TGW-Attachment_Spoke_B', type: 'spoke' }
+        ]);
+        
+        this.createRouteTable(firewallSubnetA, 'Inspection VPC Subnet RT', [
+            { destination: '0.0.0.0/0', target: 'Firewall_Endpoint_AZ', type: 'endpoint' }
+        ]);
+        
+        this.createRouteTable(firewallEndpointA, 'Inspection Return RT', [
+            { destination: '0.0.0.0/0', target: 'tgw-id', type: 'transit' }
+        ]);
+    }
+
+    buildDecentralizedModel() {
+        // Clear existing components
+        this.clearScene();
+        
+        // DISTRIBUTED MODEL: Each VPC has its own firewall
+        // Based on official AWS documentation
+        
+        // Create Internet Gateway
+        const igw = this.createInternetGateway(0, 0, 15, 'Internet Gateway');
+        
+        // VPC 1 with distributed firewall
+        const vpc1 = this.createVPC(-15, 0, 0, 'Protected VPC A (10.0.0.0/16)', '#3498db');
+        const workloadSubnet1 = this.createSubnet(-17, 0, 0, 'Workload Subnet (public)', '#27ae60', vpc1);
+        const firewallSubnet1 = this.createSubnet(-13, 0, 0, 'Firewall Subnet', '#e74c3c', vpc1);
+        const firewallEndpoint1 = this.createFirewall(-13, 2, 0, 'Firewall Endpoint');
+        
+        // VPC 2 with distributed firewall
+        const vpc2 = this.createVPC(0, 0, 0, 'Protected VPC B (10.1.0.0/16)', '#9b59b6');
+        const workloadSubnet2 = this.createSubnet(-2, 0, 0, 'Workload Subnet (public)', '#27ae60', vpc2);
+        const firewallSubnet2 = this.createSubnet(2, 0, 0, 'Firewall Subnet', '#e74c3c', vpc2);
+        const firewallEndpoint2 = this.createFirewall(2, 2, 0, 'Firewall Endpoint');
+        
+        // VPC 3 with distributed firewall
+        const vpc3 = this.createVPC(15, 0, 0, 'Protected VPC C (10.2.0.0/16)', '#f39c12');
+        const workloadSubnet3 = this.createSubnet(13, 0, 0, 'Workload Subnet (public)', '#27ae60', vpc3);
+        const firewallSubnet3 = this.createSubnet(17, 0, 0, 'Firewall Subnet', '#e74c3c', vpc3);
+        const firewallEndpoint3 = this.createFirewall(17, 2, 0, 'Firewall Endpoint');
+        
+        // Connections (each VPC connects to IGW through its firewall)
+        this.createConnection(igw, vpc1, '#3498db');
+        this.createConnection(igw, vpc2, '#9b59b6');
+        this.createConnection(igw, vpc3, '#f39c12');
+        
+        // Route Tables per AWS documentation for distributed model
+        
+        // VPC 1 Route Tables
+        this.createRouteTable(workloadSubnet1, 'Workload Subnet RT', [
+            { destination: '0.0.0.0/0', target: 'Firewall_Endpoint_AZ', type: 'endpoint' }
+        ]);
+        
+        this.createRouteTable(firewallSubnet1, 'Firewall Subnet RT', [
+            { destination: '0.0.0.0/0', target: 'igw-id', type: 'public' }
+        ]);
+        
+        this.createRouteTable(igw, 'IGW Ingress RT (VPC A)', [
+            { destination: '10.0.0.0/24', target: 'Firewall_Endpoint_AZ', type: 'endpoint' }
+        ]);
+        
+        // VPC 2 Route Tables
+        this.createRouteTable(workloadSubnet2, 'Workload Subnet RT', [
+            { destination: '0.0.0.0/0', target: 'Firewall_Endpoint_AZ', type: 'endpoint' }
+        ]);
+        
+        this.createRouteTable(firewallSubnet2, 'Firewall Subnet RT', [
+            { destination: '0.0.0.0/0', target: 'igw-id', type: 'public' }
+        ]);
+        
+        // VPC 3 Route Tables
+        this.createRouteTable(workloadSubnet3, 'Workload Subnet RT', [
+            { destination: '0.0.0.0/0', target: 'Firewall_Endpoint_AZ', type: 'endpoint' }
+        ]);
+        
+        this.createRouteTable(firewallSubnet3, 'Firewall Subnet RT', [
+            { destination: '0.0.0.0/0', target: 'igw-id', type: 'public' }
+        ]);
+    }
+
+    buildCombinedModel() {
+        // Clear existing components
+        this.clearScene();
+        
+        // COMBINED MODEL: Centralized East-West + Distributed Internet access
+        // Based on official AWS documentation
+        
+        // Create Transit Gateway for East-West traffic
+        const tgw = this.createTransitGateway(0, 0, 0, 'Transit Gateway');
+        
+        // Create Inspection VPC for East-West traffic
+        const inspectionVPC = this.createVPC(0, 0, 10, 'Inspection VPC (100.64.0.0/16)', '#e74c3c');
+        const tgwSubnet = this.createSubnet(-2, 0, 10, 'TGW Subnet', '#9b59b6', inspectionVPC);
+        const firewallSubnet = this.createSubnet(2, 0, 10, 'Firewall Subnet', '#e74c3c', inspectionVPC);
+        const firewallEndpoint = this.createFirewall(2, 2, 10, 'Firewall Endpoint');
+        
+        // Create Internet Gateway
+        const igw = this.createInternetGateway(0, 0, 15, 'Internet Gateway');
+        
+        // Spoke VPC with local IGW (combined approach)
+        const spokeVPC1 = this.createVPC(-15, 0, 0, 'Spoke VPC A (10.1.0.0/16)', '#3498db');
+        const publicSubnet1 = this.createSubnet(-17, 0, 0, 'Public Subnet', '#27ae60', spokeVPC1);
+        const localFirewallSubnet1 = this.createSubnet(-13, 0, 0, 'Local Firewall Subnet', '#e74c3c', spokeVPC1);
+        const localFirewall1 = this.createFirewall(-13, 2, 0, 'Local Firewall');
+        
+        // Spoke VPC with TGW only (centralized approach)
+        const spokeVPC2 = this.createVPC(15, 0, 0, 'Spoke VPC B (10.2.0.0/16)', '#f39c12');
+        const privateSubnet2 = this.createSubnet(15, 0, 0, 'Private Subnet', '#27ae60', spokeVPC2);
+        
+        // Connections
+        this.createConnection(tgw, inspectionVPC, '#e74c3c');
+        this.createConnection(tgw, spokeVPC1, '#3498db');
+        this.createConnection(tgw, spokeVPC2, '#f39c12');
+        this.createConnection(igw, spokeVPC1, '#3498db'); // Direct IGW connection
+        
+        // Route Tables for Combined Model
+        
+        // East-West traffic through centralized inspection
+        this.createRouteTable(tgw, 'Spoke RT (East-West)', [
+            { destination: '10.0.0.0/8', target: 'TGW-Attachment_Inspection_VPC', type: 'inspection' }
+        ]);
+        
+        this.createRouteTable(inspectionVPC, 'Firewall RT (East-West)', [
+            { destination: '10.1.0.0/16', target: 'TGW-Attachment_Spoke_A', type: 'spoke' },
+            { destination: '10.2.0.0/16', target: 'TGW-Attachment_Spoke_B', type: 'spoke' }
+        ]);
+        
+        // Local Internet access for Spoke VPC A
+        this.createRouteTable(publicSubnet1, 'Public Subnet RT', [
+            { destination: '0.0.0.0/0', target: 'Local_Firewall_Endpoint', type: 'endpoint' },
+            { destination: '10.0.0.0/8', target: 'tgw-id', type: 'transit' }
+        ]);
+        
+        this.createRouteTable(localFirewallSubnet1, 'Local Firewall Subnet RT', [
+            { destination: '0.0.0.0/0', target: 'igw-id', type: 'public' }
+        ]);
+        
+        // Centralized egress for Spoke VPC B
+        this.createRouteTable(privateSubnet2, 'Private Subnet RT', [
+            { destination: '0.0.0.0/0', target: 'tgw-id', type: 'transit' }
+        ]);
+    }
+
+    buildNorthSouthIngressModel() {
+        // Clear existing components
+        this.clearScene();
+        
+        // NORTH-SOUTH INGRESS MODEL: Firewall for ingress traffic control
+        // Based on AWS documentation for ingress filtering
+        
+        // Main VPC (10.0.0.0/16)
+        const mainVPC = this.createVPC(0, 0, 0, 'Main VPC (10.0.0.0/16)', '#3498db');
+        
+        // Public Subnet for ALB/NLB
+        const publicSubnet = this.createSubnet(-2, 0, 2, 'Public Subnet (10.0.1.0/24)', '#e74c3c', mainVPC);
+        
+        // Private Subnet for workloads
+        const privateSubnet = this.createSubnet(2, 0, -2, 'Private Subnet (10.0.2.0/24)', '#27ae60', mainVPC);
+        
+        // Firewall Subnet
+        const firewallSubnet = this.createSubnet(0, 0, 0, 'Firewall Subnet (10.0.3.0/28)', '#e74c3c', mainVPC);
+        
+        // Firewall Endpoint
+        const firewall = this.createFirewall(0, 2, 0, 'Ingress Firewall Endpoint');
+        
+        // Internet Gateway
+        const igw = this.createInternetGateway(0, 0, 15, 'Internet Gateway');
+        
+        // Load Balancer
+        const lb = this.createLoadBalancer(-2, 2, 2, 'Application Load Balancer');
+        
+        // Connections
+        this.createConnection(igw, mainVPC, '#f39c12');
+        this.createConnection(publicSubnet, lb, '#e74c3c');
+        this.createConnection(lb, privateSubnet, '#27ae60');
+        
+        // Create route tables for North-South Ingress model
+        
+        // IGW Ingress Route Table (for incoming traffic)
+        this.createRouteTable(igw, 'IGW Ingress Route Table', [
+            { destination: '10.0.1.0/24', target: 'Firewall_Endpoint_AZ', type: 'endpoint' },
+            { destination: '10.0.0.0/16', target: 'local', type: 'local' }
+        ]);
+        
+        // Public Subnet Route Table
+        this.createRouteTable(publicSubnet, 'Public Subnet Route Table', [
+            { destination: '10.0.0.0/16', target: 'local', type: 'local' },
+            { destination: '0.0.0.0/0', target: 'Firewall_Endpoint_AZ', type: 'endpoint' }
+        ]);
+        
+        // Firewall Subnet Route Table
+        this.createRouteTable(firewallSubnet, 'Firewall Subnet Route Table', [
+            { destination: '10.0.0.0/16', target: 'local', type: 'local' },
+            { destination: '0.0.0.0/0', target: 'igw-id', type: 'public' }
+        ]);
+        
+        // Private Subnet Route Table
+        this.createRouteTable(privateSubnet, 'Private Subnet Route Table', [
+            { destination: '10.0.0.0/16', target: 'local', type: 'local' },
+            { destination: '0.0.0.0/0', target: 'nat-gw-id', type: 'private' }
+        ]);
+        
+        // Firewall Endpoint Route Table
+        this.createRouteTable(firewall, 'Firewall Endpoint Route Table', [
+            { destination: '10.0.1.0/24', target: 'ALB_ENI', type: 'endpoint' },
+            { destination: '10.0.2.0/24', target: 'Private_Subnet', type: 'local' },
+            { destination: '0.0.0.0/0', target: 'igw-id', type: 'public' }
+        ]);
+        
+        // Load Balancer Route Table
+        this.createRouteTable(lb, 'ALB Target Route Table', [
+            { destination: '10.0.2.0/24', target: 'Private_Subnet_Targets', type: 'local' },
+            { destination: '10.0.0.0/16', target: 'local', type: 'local' }
+        ]);
+    }
+
+    buildCentralizedDedicatedModel() {
+        // Clear existing components
+        this.clearScene();
+        
+        // CENTRALIZED DEDICATED MODEL: Dedicated firewall VPC with application VPCs
+        // Based on AWS documentation for dedicated firewall architecture
+        
+        // Dedicated Firewall VPC (100.64.0.0/16)
+        const firewallVPC = this.createVPC(0, 0, 0, 'Firewall VPC (100.64.0.0/16)', '#e74c3c');
+        const firewallSubnet = this.createSubnet(0, 0, 0, 'Firewall Subnet (100.64.1.0/28)', '#c0392b', firewallVPC);
+        const firewall = this.createFirewall(0, 2, 0, 'Dedicated Firewall Endpoint');
+        
+        // Application VPC 1 (10.1.0.0/16)
+        const appVPC1 = this.createVPC(-20, 0, 0, 'App VPC 1 (10.1.0.0/16)', '#3498db');
+        const appSubnet1 = this.createSubnet(-20, 0, 0, 'App Subnet 1 (10.1.1.0/24)', '#2980b9', appVPC1);
+        
+        // Application VPC 2 (10.2.0.0/16)
+        const appVPC2 = this.createVPC(20, 0, 0, 'App VPC 2 (10.2.0.0/16)', '#9b59b6');
+        const appSubnet2 = this.createSubnet(20, 0, 0, 'App Subnet 2 (10.2.1.0/24)', '#8e44ad', appVPC2);
+        
+        // Transit Gateway for connecting VPCs
+        const tgw = this.createTransitGateway(0, 0, -15, 'Transit Gateway');
+        
+        // Internet Gateway
+        const igw = this.createInternetGateway(0, 0, 15, 'Internet Gateway');
+        
+        // Connections
+        this.createConnection(igw, firewallVPC, '#f39c12');
+        this.createConnection(tgw, firewallVPC, '#e74c3c');
+        this.createConnection(tgw, appVPC1, '#3498db');
+        this.createConnection(tgw, appVPC2, '#9b59b6');
+        
+        // Create route tables for Centralized Dedicated model
+        
+        // IGW Ingress Route Table
+        this.createRouteTable(igw, 'IGW Ingress Route Table', [
+            { destination: '100.64.0.0/16', target: 'local', type: 'local' },
+            { destination: '10.1.0.0/16', target: 'Firewall_Endpoint_AZ', type: 'endpoint' },
+            { destination: '10.2.0.0/16', target: 'Firewall_Endpoint_AZ', type: 'endpoint' }
+        ]);
+        
+        // Firewall VPC Route Tables
+        this.createRouteTable(firewallSubnet, 'Firewall Subnet Route Table', [
+            { destination: '100.64.0.0/16', target: 'local', type: 'local' },
+            { destination: '10.1.0.0/16', target: 'tgw-id', type: 'transit' },
+            { destination: '10.2.0.0/16', target: 'tgw-id', type: 'transit' },
+            { destination: '0.0.0.0/0', target: 'igw-id', type: 'public' }
+        ]);
+        
+        this.createRouteTable(firewall, 'Dedicated Firewall Route Table', [
+            { destination: '100.64.0.0/16', target: 'local', type: 'local' },
+            { destination: '10.1.0.0/16', target: 'TGW_Attachment_App_VPC_1', type: 'transit' },
+            { destination: '10.2.0.0/16', target: 'TGW_Attachment_App_VPC_2', type: 'transit' },
+            { destination: '0.0.0.0/0', target: 'igw-id', type: 'public' }
+        ]);
+        
+        // Transit Gateway Route Tables
+        this.createRouteTable(tgw, 'TGW Route Table (Firewall)', [
+            { destination: '10.1.0.0/16', target: 'TGW_Attachment_App_VPC_1', type: 'spoke' },
+            { destination: '10.2.0.0/16', target: 'TGW_Attachment_App_VPC_2', type: 'spoke' },
+            { destination: '0.0.0.0/0', target: 'TGW_Attachment_Firewall_VPC', type: 'inspection' }
+        ]);
+        
+        // Application VPC 1 Route Tables
+        this.createRouteTable(appVPC1, 'App VPC 1 Route Table', [
+            { destination: '10.1.0.0/16', target: 'local', type: 'local' },
+            { destination: '0.0.0.0/0', target: 'tgw-id', type: 'transit' }
+        ]);
+        
+        this.createRouteTable(appSubnet1, 'App Subnet 1 Route Table', [
+            { destination: '10.1.0.0/16', target: 'local', type: 'local' },
+            { destination: '10.2.0.0/16', target: 'tgw-id', type: 'transit' },
+            { destination: '0.0.0.0/0', target: 'tgw-id', type: 'transit' }
+        ]);
+        
+        // Application VPC 2 Route Tables
+        this.createRouteTable(appVPC2, 'App VPC 2 Route Table', [
+            { destination: '10.2.0.0/16', target: 'local', type: 'local' },
+            { destination: '0.0.0.0/0', target: 'tgw-id', type: 'transit' }
+        ]);
+        
+        this.createRouteTable(appSubnet2, 'App Subnet 2 Route Table', [
+            { destination: '10.2.0.0/16', target: 'local', type: 'local' },
+            { destination: '10.1.0.0/16', target: 'tgw-id', type: 'transit' },
+            { destination: '0.0.0.0/0', target: 'tgw-id', type: 'transit' }
+        ]);
+    }
+
+    createNumberedFlow(from, to, number) {
+        // Create arrow with number for traffic flow visualization
+        const direction = new THREE.Vector3()
+            .subVectors(to.position, from.position)
+            .normalize();
+        
+        const arrowGeometry = new THREE.ConeGeometry(0.5, 2, 8);
+        const arrowMaterial = new THREE.MeshStandardMaterial({ color: 0xff6b6b });
+        const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
+        
+        const midpoint = new THREE.Vector3()
+            .addVectors(from.position, to.position)
+            .multiplyScalar(0.5);
+        
+        arrow.position.copy(midpoint);
+        arrow.lookAt(to.position);
+        arrow.rotateX(Math.PI / 2);
+        
+        // Add number label
+        const numberGeometry = new THREE.PlaneGeometry(1, 1);
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+        const context = canvas.getContext('2d');
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, 64, 64);
+        context.fillStyle = '#000000';
+        context.font = '32px Arial';
+        context.textAlign = 'center';
+        context.fillText(number, 32, 40);
+        
+        const numberTexture = new THREE.CanvasTexture(canvas);
+        const numberMaterial = new THREE.MeshBasicMaterial({ 
+            map: numberTexture, 
+            transparent: true 
+        });
+        const numberMesh = new THREE.Mesh(numberGeometry, numberMaterial);
+        numberMesh.position.copy(midpoint);
+        numberMesh.position.y += 3;
+        numberMesh.lookAt(this.camera.position);
+        
+        this.scene.add(arrow);
+        this.scene.add(numberMesh);
+        
+        return { arrow, numberMesh };
+    }
+
+    createTransitGateway(x, y, z, label) {
+        const group = new THREE.Group();
+        
+        // Main body - distinctive transit gateway shape
+        const geometry = new THREE.CylinderGeometry(2, 2, 1, 6);
+        const material = new THREE.MeshStandardMaterial({ 
+            color: 0x9b59b6, 
+            metalness: 0.7, 
+            roughness: 0.3 
+        });
+        const body = new THREE.Mesh(geometry, material);
+        body.castShadow = true;
+        body.receiveShadow = true;
+        
+        // Connection points for multiple VPCs
+        const pointGeometry = new THREE.SphereGeometry(0.3, 8, 8);
+        const pointMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xffffff, 
+            metalness: 0.8, 
+            roughness: 0.2 
+        });
+        
+        for (let i = 0; i < 6; i++) {
+            const point = new THREE.Mesh(pointGeometry, pointMaterial);
+            const angle = (i / 6) * Math.PI * 2;
+            point.position.set(Math.cos(angle) * 2.2, 0, Math.sin(angle) * 2.2);
+            group.add(point);
+        }
+        
+        group.add(body);
+        group.position.set(x, y, z);
+        group.userData = { type: 'transit-gateway', label };
+        
+        this.scene.add(group);
+        this.components.push({ object: group, type: 'transit-gateway', label });
+        
+        return group;
+    }
+
+    createVPC(x, y, z, label, color = '#3498db') {
+        const group = new THREE.Group();
+        
+        // Create VPC as a larger transparent box
+        const geometry = new THREE.BoxGeometry(8, 4, 8);
+        const material = new THREE.MeshStandardMaterial({ 
+            color: color, 
+            transparent: true, 
+            opacity: 0.3,
+            metalness: 0.1,
+            roughness: 0.8
+        });
+        const vpc = new THREE.Mesh(geometry, material);
+        vpc.castShadow = true;
+        vpc.receiveShadow = true;
+        
+        // Add wireframe
+        const wireframe = new THREE.WireframeGeometry(geometry);
+        const wireMaterial = new THREE.LineBasicMaterial({ color: color, linewidth: 2 });
+        const wireObject = new THREE.LineSegments(wireframe, wireMaterial);
+        
+        group.add(vpc);
+        group.add(wireObject);
+        group.position.set(x, y, z);
+        group.userData = { type: 'vpc', label };
+        
+        this.scene.add(group);
+        this.components.push({ object: group, type: 'vpc', label });
+        this.updateStatistics();
+        
+        return group;
+    }
+
+    createSubnet(x, y, z, label, color = '#e74c3c', parent = null) {
+        const group = new THREE.Group();
+        
+        // Subnet as smaller box inside VPC
+        const geometry = new THREE.BoxGeometry(3, 1.5, 3);
+        const material = new THREE.MeshStandardMaterial({ 
+            color: color, 
+            transparent: true, 
+            opacity: 0.6,
+            metalness: 0.2,
+            roughness: 0.6
+        });
+        const subnet = new THREE.Mesh(geometry, material);
+        subnet.castShadow = true;
+        subnet.receiveShadow = true;
+        
+        group.add(subnet);
+        group.position.set(x, y, z);
+        group.userData = { type: 'subnet', label, parent };
+        
+        this.scene.add(group);
+        this.components.push({ object: group, type: 'subnet', label });
+        this.updateStatistics();
+        
+        return group;
+    }
+
+    createFirewall(x, y, z, label) {
+        const group = new THREE.Group();
+        
+        // Main firewall body
+        const geometry = new THREE.CylinderGeometry(1, 1, 3, 8);
+        const material = new THREE.MeshStandardMaterial({ 
+            color: 0xe74c3c, 
+            metalness: 0.7, 
+            roughness: 0.3 
+        });
+        const body = new THREE.Mesh(geometry, material);
+        body.castShadow = true;
+        body.receiveShadow = true;
+        
+        // Firewall shield symbol
+        const shieldGeometry = new THREE.RingGeometry(0.5, 1.2, 8);
+        const shieldMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xffffff, 
+            transparent: true, 
+            opacity: 0.8 
+        });
+        const shield = new THREE.Mesh(shieldGeometry, shieldMaterial);
+        shield.rotation.x = Math.PI / 2;
+        shield.position.y = 2;
+        
+        group.add(body);
+        group.add(shield);
+        group.position.set(x, y, z);
+        group.userData = { type: 'firewall', label };
+        
+        this.scene.add(group);
+        this.components.push({ object: group, type: 'firewall', label });
+        this.updateStatistics();
+        
+        return group;
+    }
+
+    createInternetGateway(x, y, z, label) {
+        const group = new THREE.Group();
+        
+        // IGW as a distinctive gateway shape
+        const geometry = new THREE.BoxGeometry(4, 2, 1);
+        const material = new THREE.MeshStandardMaterial({ 
+            color: 0xf39c12, 
+            metalness: 0.8, 
+            roughness: 0.2 
+        });
+        const body = new THREE.Mesh(geometry, material);
+        body.castShadow = true;
+        body.receiveShadow = true;
+        
+        // Add cloud symbol for internet
+        const cloudGeometry = new THREE.SphereGeometry(1, 8, 6);
+        const cloudMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xecf0f1, 
+            transparent: true, 
+            opacity: 0.8 
+        });
+        const cloud = new THREE.Mesh(cloudGeometry, cloudMaterial);
+        cloud.position.y = 2;
+        
+        group.add(body);
+        group.add(cloud);
+        group.position.set(x, y, z);
+        group.userData = { type: 'gateway', label };
+        
+        this.scene.add(group);
+        this.components.push({ object: group, type: 'gateway', label });
+        this.updateStatistics();
+        
+        return group;
+    }
+
+    createNATGateway(x, y, z, label) {
+        const group = new THREE.Group();
+        
+        // Main body
+        const geometry = new THREE.BoxGeometry(2, 2, 2);
+        const material = new THREE.MeshStandardMaterial({ 
+            color: 0xf39c12, 
+            metalness: 0.5, 
+            roughness: 0.4 
+        });
+        const body = new THREE.Mesh(geometry, material);
+        body.castShadow = true;
+        body.receiveShadow = true;
+        
+        // Arrow icon
+        const arrowGeometry = new THREE.ConeGeometry(0.3, 0.8, 8);
+        const arrowMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xe67e22, 
+            metalness: 0.7, 
+            roughness: 0.2 
+        });
+        const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
+        arrow.rotation.z = Math.PI / 2;
+        arrow.position.x = 0.5;
+        
+        group.add(body, arrow);
+        group.position.set(x, y, z);
+        group.userData = { type: 'nat-gateway', label };
+        
+        this.scene.add(group);
+        this.components.push({ object: group, type: 'nat-gateway', label });
+        
+        return group;
+    }
+
+    createLoadBalancer(x, y, z, label) {
+        const group = new THREE.Group();
+        
+        // Main body
+        const geometry = new THREE.BoxGeometry(3, 1.5, 2);
+        const material = new THREE.MeshStandardMaterial({ 
+            color: 0x9b59b6, 
+            metalness: 0.6, 
+            roughness: 0.3 
+        });
+        const body = new THREE.Mesh(geometry, material);
+        body.castShadow = true;
+        body.receiveShadow = true;
+        
+        // Balance icon
+        const balanceGeometry = new THREE.CylinderGeometry(0.2, 0.2, 1, 8);
+        const balanceMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x8e44ad, 
+            metalness: 0.8, 
+            roughness: 0.1 
+        });
+        const balance = new THREE.Mesh(balanceGeometry, balanceMaterial);
+        balance.position.y = 0.5;
+        
+        group.add(body, balance);
+        group.position.set(x, y, z);
+        group.userData = { type: 'load-balancer', label };
+        
+        this.scene.add(group);
+        this.components.push({ object: group, type: 'load-balancer', label });
+        
+        return group;
+    }
+
+    createConnection(from, to, color) {
+        const fromPos = from.position;
+        const toPos = to.position;
+        
+        const points = [fromPos, toPos];
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const material = new THREE.LineBasicMaterial({ color: color, linewidth: 3 });
+        const line = new THREE.Line(geometry, material);
+        
+        this.scene.add(line);
+    }
+
+    createRouteTable(component, title, routes) {
+        // Always use component.userData.label as the key
+        const key = component.userData?.label;
+        this.routeTables[key] = {
+            title,
+            routes,
+            component
+        };
+        console.log('Route table created for:', key, this.routeTables[key]);
+        
+        // Update the route tables display panel
+        this.updateRouteTablesDisplay();
+    }
+
+    updateRouteTablesDisplay() {
+        const routeTablesContainer = document.querySelector('#routeTablesContent');
+        if (!routeTablesContainer) {
+            console.warn('Route tables container not found');
+            return;
+        }
+        
+        let content = '';
+        
+        if (Object.keys(this.routeTables).length === 0) {
+            content = '<p>No route tables configured for this deployment model.</p>';
+        } else {
+            Object.entries(this.routeTables).forEach(([key, routeTable]) => {
+                content += `
+                    <div class="route-table-section">
+                        <h4>${routeTable.title}</h4>
+                        <div class="component-label">${key}</div>
+                        <table class="route-table">
+                            <thead>
+                                <tr>
+                                    <th>Destination</th>
+                                    <th>Target</th>
+                                    <th>Type</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${routeTable.routes.map(route => `
+                                    <tr class="route-${route.type}">
+                                        <td>${route.destination}</td>
+                                        <td>${route.target}</td>
+                                        <td><span class="route-type-badge route-type-${route.type}">${route.type}</span></td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            });
+        }
+        
+        routeTablesContainer.innerHTML = content;
+        console.log('Route tables display updated with', Object.keys(this.routeTables).length, 'tables');
+    }
+
+    showComponentInfo(component, type, info) {
+        // Log the label and available route table keys
+        const label = component.userData?.label || component.name;
+        console.log('Clicked component label:', label);
+        console.log('Available route table keys:', Object.keys(this.routeTables));
+        const routeTable = this.routeTables[label];
+        
+        let content = `
+            <h4>${info.description}</h4>
+            <div class="info-section">
+                <h5>Component Details:</h5>
+                <ul>
+                    <li><strong>Type:</strong> ${type}</li>
+                    <li><strong>Label:</strong> ${label}</li>
+                    <li><strong>Position:</strong> (${component.position.x.toFixed(1)}, ${component.position.y.toFixed(1)}, ${component.position.z.toFixed(1)})</li>
+                </ul>
+            </div>
+            <div class="info-section">
+                <h5>Features:</h5>
+                <ul>
+                    ${info.features.map(feature => `<li>${feature}</li>`).join('')}
+                </ul>
+            </div>
+            <div class="info-section">
+                <h5>Best Practices:</h5>
+                <ul>
+                    ${info.bestPractices.map(practice => `<li>${practice}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+        
+        if (routeTable && routeTable.routes && routeTable.routes.length > 0) {
+            content += `
+                <div class="info-section">
+                    <h5>Associated Route Table: ${routeTable.title}</h5>
+                    <table class="route-table">
+                        <thead>
+                            <tr>
+                                <th>Destination</th>
+                                <th>Target</th>
+                                <th>Type</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${routeTable.routes.map(route => `
+                                <tr class="route-${route.type}">
+                                    <td>${route.destination}</td>
+                                    <td>${route.target}</td>
+                                    <td><span class="route-type-badge route-type-${route.type}">${route.type}</span></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        } else {
+            content += `<div class='info-section'><em>No route table associated with this component.</em></div>`;
+        }
+        
+        document.getElementById('infoContent').innerHTML = content;
+    }
+
+    // Simulation methods
+    startSimulation() {
+        this.simulationRunning = true;
+        document.getElementById('startSimulation').disabled = true;
+        document.getElementById('stopSimulation').disabled = false;
+        
+        // Start traffic animation
+        this.animateTraffic();
+        
+        // Update statistics
+        this.updateStatistics();
+    }
+
+    stopSimulation() {
+        this.simulationRunning = false;
+        document.getElementById('startSimulation').disabled = false;
+        document.getElementById('stopSimulation').disabled = true;
+        
+        // Clear existing traffic particles
+        this.trafficAnimations.forEach(anim => {
+            if (anim.particle) {
+                this.scene.remove(anim.particle);
+            }
+        });
+        this.trafficAnimations = [];
+        
+        // Update statistics
+        this.updateStatistics();
+    }
+
+    resetSimulation() {
+        this.stopSimulation();
+        // Reset any simulation state
+    }
+
+    animateTraffic() {
+        if (!this.simulationRunning) return;
+        
+        // Get all connections (lines between components)
+        const connections = this.components.filter(comp => 
+            comp.type === 'connection' || comp.object.userData?.type === 'connection'
+        );
+        
+        connections.forEach(connection => {
+            const from = connection.object?.userData?.from || connection.from;
+            const to = connection.object?.userData?.to || connection.to;
+            
+            if (from && to) {
+                // Create traffic particle
+                const particleGeometry = new THREE.SphereGeometry(0.3, 8, 8);
+                const particleMaterial = new THREE.MeshBasicMaterial({ 
+                    color: 0xf39c12,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+                
+                // Position at start
+                particle.position.copy(from.position);
+                this.scene.add(particle);
+                
+                // Animate to destination
+                const duration = 3000; // 3 seconds
+                const startTime = Date.now();
+                const startPos = from.position.clone();
+                const endPos = to.position.clone();
+                
+                const animate = () => {
+                    if (!this.simulationRunning) {
+                        this.scene.remove(particle);
+                        return;
+                    }
+                    
+                    const elapsed = Date.now() - startTime;
+                    const progress = elapsed / duration;
+                    
+                    if (progress >= 1) {
+                        // Remove particle when it reaches destination
+                        this.scene.remove(particle);
+                        
+                        // Create new particle after delay
+                        if (this.simulationRunning) {
+                            setTimeout(() => {
+                                if (this.simulationRunning) {
+                                    this.animateTraffic();
+                                }
+                            }, 1000);
+                        }
+                        return;
+                    }
+                    
+                    // Interpolate position
+                    particle.position.lerpVectors(startPos, endPos, progress);
+                    
+                    // Add some bobbing motion
+                    particle.position.y += Math.sin(progress * Math.PI * 4) * 0.2;
+                    
+                    // Scale particle based on progress
+                    const scale = 0.5 + progress * 0.5;
+                    particle.scale.set(scale, scale, scale);
+                    
+                    requestAnimationFrame(animate);
+                };
+                
+                animate();
+                
+                // Store animation reference
+                this.trafficAnimations.push({
+                    particle,
+                    startTime: Date.now(),
+                    duration
+                });
+            }
+        });
+        
+        // If no connections, create some demo traffic between components
+        if (connections.length === 0) {
+            const components = this.components.filter(comp => 
+                comp.type !== 'connection' && comp.object && comp.object.position
+            );
+            
+            if (components.length > 1) {
+                for (let i = 0; i < Math.min(3, components.length - 1); i++) {
+                    const from = components[i].object;
+                    const to = components[i + 1].object;
+                    
+                    // Create traffic particle
+                    const particleGeometry = new THREE.SphereGeometry(0.3, 8, 8);
+                    const particleMaterial = new THREE.MeshBasicMaterial({ 
+                        color: 0xe74c3c,
+                        transparent: true,
+                        opacity: 0.8
+                    });
+                    const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+                    
+                    particle.position.copy(from.position);
+                    this.scene.add(particle);
+                    
+                    const duration = 4000;
+                    const startTime = Date.now();
+                    const startPos = from.position.clone();
+                    const endPos = to.position.clone();
+                    
+                    const animate = () => {
+                        if (!this.simulationRunning) {
+                            this.scene.remove(particle);
+                            return;
+                        }
+                        
+                        const elapsed = Date.now() - startTime;
+                        const progress = elapsed / duration;
+                        
+                        if (progress >= 1) {
+                            this.scene.remove(particle);
+                            if (this.simulationRunning) {
+                                setTimeout(() => {
+                                    if (this.simulationRunning) {
+                                        this.animateTraffic();
+                                    }
+                                }, 2000);
+                            }
+                            return;
+                        }
+                        
+                        particle.position.lerpVectors(startPos, endPos, progress);
+                        particle.position.y += Math.sin(progress * Math.PI * 3) * 0.3;
+                        
+                        const scale = 0.3 + progress * 0.7;
+                        particle.scale.set(scale, scale, scale);
+                        
+                        requestAnimationFrame(animate);
+                    };
+                    
+                    animate();
+                    
+                    this.trafficAnimations.push({
+                        particle,
+                        startTime: Date.now(),
+                        duration
+                    });
+                }
+            }
+        }
+    }
+
+    // Utility methods
+    zoomIn() {
+        this.camera.position.multiplyScalar(0.9);
+        this.controls.update();
+    }
+
+    zoomOut() {
+        this.camera.position.multiplyScalar(1.1);
+        this.controls.update();
+    }
+
+    resetView() {
+        this.camera.position.set(40, 40, 40);
+        this.controls.target.set(0, 0, 0);
+        this.controls.update();
+    }
+
+    toggleWireframe(show = null) {
+        if (show !== null) {
+            this.wireframeMode = show;
+        } else {
+            this.wireframeMode = !this.wireframeMode;
+        }
+        
+        this.scene.traverse((object) => {
+            if (object.isMesh && object.material) {
+                if (Array.isArray(object.material)) {
+                    object.material.forEach(mat => {
+                        mat.wireframe = this.wireframeMode;
+                    });
+                } else {
+                    object.material.wireframe = this.wireframeMode;
+                }
+            }
+        });
+    }
+
+    clearScene() {
+        // Remove all existing components from scene except lights
+        const objectsToRemove = [];
+        this.scene.traverse((child) => {
+            if (!child.isLight && !child.isCamera && child !== this.scene) {
+                objectsToRemove.push(child);
+            }
+        });
+        
+        objectsToRemove.forEach((obj) => {
             if (obj.geometry) obj.geometry.dispose();
-            if (obj.material) obj.material.dispose();
-        }
-    });
-}
-
-function createBox(w, h, d, color) {
-    const mat = new THREE.MeshStandardMaterial({ color });
-    const geo = new THREE.BoxGeometry(w, h, d);
-    return new THREE.Mesh(geo, mat);
-}
-
-function createCylinder(r, h, color) {
-    const mat = new THREE.MeshStandardMaterial({ color });
-    const geo = new THREE.CylinderGeometry(r, r, h, 32);
-    return new THREE.Mesh(geo, mat);
-}
-
-function createSphere(r, color) {
-    const mat = new THREE.MeshStandardMaterial({ color });
-    const geo = new THREE.SphereGeometry(r, 32, 32);
-    return new THREE.Mesh(geo, mat);
-}
-
-function createLabel(text, color = '#ffffff') {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    ctx.font = '24px Arial';
-    const textWidth = ctx.measureText(text).width;
-    canvas.width = textWidth + 10;
-    canvas.height = 32;
-    ctx.font = '24px Arial';
-    ctx.fillStyle = color;
-    ctx.fillText(text, 5, 24);
-    const texture = new THREE.CanvasTexture(canvas);
-    const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
-    const sprite = new THREE.Sprite(material);
-    sprite.scale.set(canvas.width / 20, canvas.height / 20, 1);
-    return sprite;
-}
-
-function addConnection(p1, p2, color = 0xffff00) {
-    const points = [new THREE.Vector3(...p1), new THREE.Vector3(...p2)];
-    const geo = new THREE.BufferGeometry().setFromPoints(points);
-    const mat = new THREE.LineBasicMaterial({ color });
-    const line = new THREE.Line(geo, mat);
-    scene.add(line);
-}
-
-// ================= Model Builders =================
-function buildCentralizedModel() {
-    clearScene();
-
-    // --- Helper: House (VPC) ---
-    function createHouseVPC({x, y, z, color, label, vpcRouteTable, rooms}) {
-        // Open-top, open-front house: four thin side walls and a floor
-        const vpcWidth = 12;
-        const vpcDepth = 9;
-        const vpcHeight = 3;
-        const wallThickness = 0.3;
-        const wallHeight = 2.5;
-        // Floor
-        const floor = new THREE.Mesh(
-            new THREE.BoxGeometry(vpcWidth, wallThickness, vpcDepth),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        floor.position.set(x, y + wallThickness / 2, z);
-        // Left wall
-        const leftWall = new THREE.Mesh(
-            new THREE.BoxGeometry(wallThickness, wallHeight, vpcDepth),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        leftWall.position.set(x - vpcWidth / 2 + wallThickness / 2, y + wallHeight / 2, z);
-        // Right wall
-        const rightWall = leftWall.clone();
-        rightWall.position.set(x + vpcWidth / 2 - wallThickness / 2, y + wallHeight / 2, z);
-        // Back wall
-        const backWall = new THREE.Mesh(
-            new THREE.BoxGeometry(vpcWidth, wallHeight, wallThickness),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        backWall.position.set(x, y + wallHeight / 2, z - vpcDepth / 2 + wallThickness / 2);
-        // Front wall (short, just a rim at the bottom for context)
-        const frontWall = new THREE.Mesh(
-            new THREE.BoxGeometry(vpcWidth, wallThickness, wallThickness),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        frontWall.position.set(x, y + wallThickness / 2, z + vpcDepth / 2 - wallThickness / 2);
-        // Label
-        const vpcLabel = createLabel(label, "#fff");
-        vpcLabel.position.set(x, y + wallHeight + 1.2, z);
-        // Group
-        const group = new THREE.Group();
-        group.add(floor, leftWall, rightWall, backWall, frontWall, vpcLabel);
-
-        // --- Interactivity: click house to show VPC route table
-        group.cursor = "pointer";
-        group.onClick = () => showRouteTablePanel(group, vpcRouteTable, label);
-
-        // --- Rooms (subnets) ---
-        rooms.forEach((room, idx) => {
-            // Room as a box inside the house
-            const roomBox = new THREE.Mesh(
-                new THREE.BoxGeometry(3.5, 1.5, 3.5),
-                new THREE.MeshStandardMaterial({ color: room.color, opacity: 0.7, transparent: true })
-            );
-            // Arrange rooms in a grid inside the house (spread out for new VPC size)
-            const rx = x + (idx === 0 ? -3 : 3);
-            const rz = z;
-            roomBox.position.set(rx, y + 1.5, rz);
-
-            // Room label
-            const roomLabel = createLabel(room.label, "#222");
-            roomLabel.position.set(rx, y + 3.2, rz);
-
-            // Interactivity: click room to show subnet route table
-            roomBox.cursor = "pointer";
-            roomBox.onClick = () => showRouteTablePanel(roomBox, room.subnetRouteTable, room.label);
-
-            // --- HOVER EFFECT ---
-            const origColor = room.color;
-            const hoverColor = 0x333366;
-            roomBox.onPointerOver = () => {
-                roomBox.material.color.setHex(hoverColor);
-                roomBox.material.opacity = 0.95;
-            };
-            roomBox.onPointerOut = () => {
-                roomBox.material.color.set(origColor);
-                roomBox.material.opacity = 0.7;
-            };
-
-            group.add(roomBox, roomLabel);
-
-            // --- Firewall endpoint (shield) ---
-            if (room.hasFirewall) {
-                // Shield: stylized 3D object
-                const shield = new THREE.Group();
-                const shieldBody = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.5, 1, 1.5, 32, 1, false, 0, Math.PI),
-                    new THREE.MeshStandardMaterial({ color: 0xf44336, metalness: 0.6, roughness: 0.2 })
-                );
-                shieldBody.rotation.z = Math.PI;
-                shieldBody.position.y = 0.75;
-                const shieldFace = new THREE.Mesh(
-                    new THREE.CircleGeometry(0.7, 32),
-                    new THREE.MeshStandardMaterial({ color: 0xffe082, metalness: 0.8, roughness: 0.1 })
-                );
-                shieldFace.position.z = 0.01;
-                shieldFace.position.y = 1.1;
-                shield.add(shieldBody, shieldFace);
-                shield.position.set(rx, y + 2.2, rz);
-                shield.userData = { type: "firewall", label: "Firewall Endpoint", routeTable: room.firewallRouteTable };
-
-                // Shield label
-                const shieldLabel = createLabel("Firewall", "#f44336");
-                shieldLabel.position.set(rx, y + 3.7, rz);
-
-                // Interactivity: click shield to show firewall route table
-                shield.cursor = "pointer";
-                shield.onClick = () => showRouteTablePanel(shield, room.firewallRouteTable, "Firewall Endpoint");
-
-                group.add(shield, shieldLabel);
-            }
-
-            // Add to global subnet mesh array for hover
-            allSubnetMeshes.push(roomBox);
-        });
-
-        scene.add(group);
-        return group;
-    }
-
-    // --- Route Table HTML ---
-    const inspVpcRouteTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Inspection VPC Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>Firewall Subnet (subnet-0abc1234)</td></tr>
-                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
-            </tbody>
-        </table>
-    `;
-    const firewallSubnetRouteTableA = `
-        <div style="margin-bottom:8px;font-weight:bold;">Firewall Subnet A Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>Firewall Endpoint (vpce-az-a-id)</td></tr>
-                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
-            </tbody>
-        </table>
-    `;
-    const firewallSubnetRouteTableB = `
-        <div style="margin-bottom:8px;font-weight:bold;">Firewall Subnet B Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>Firewall Endpoint (vpce-az-b-id)</td></tr>
-                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
-            </tbody>
-        </table>
-    `;
-    const firewallEndpointTableA = `
-        <div style="margin-bottom:8px;font-weight:bold;">Firewall Endpoint (vpce-az-a-id)</div>
-        <ul style="margin:0 0 0 16px;padding:0;">
-            <li>Stateful/Stateless Rules</li>
-            <li>HOME_NET: All VPC CIDRs</li>
-            <li>Inspects all traffic between VPCs and to/from internet</li>
-        </ul>
-    `;
-    const firewallEndpointTableB = `
-        <div style="margin-bottom:8px;font-weight:bold;">Firewall Endpoint (vpce-az-b-id)</div>
-        <ul style="margin:0 0 0 16px;padding:0;">
-            <li>Stateful/Stateless Rules</li>
-            <li>HOME_NET: All VPC CIDRs</li>
-            <li>Inspects all traffic between VPCs and to/from internet</li>
-        </ul>
-    `;
-    const tgwRouteTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">TGW Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>10.1.0.0/16</td><td>Inspection VPC Attachment</td></tr>
-                <tr><td>10.2.0.0/16</td><td>Spoke VPC A Attachment</td></tr>
-                <tr><td>10.3.0.0/16</td><td>Spoke VPC B Attachment</td></tr>
-                <tr><td>0.0.0.0/0</td><td>Inspection VPC Attachment</td></tr>
-            </tbody>
-        </table>
-    `;
-    const publicRouteTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Public Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>igw-id</td></tr>
-                <tr><td>10.1.0.0/16</td><td>local</td></tr>
-            </tbody>
-        </table>
-    `;
-
-    // --- Centralized Model Layout ---
-    // Inspection VPC (center)
-    createHouseVPC({
-        x: 0, y: 0, z: 0,
-        color: 0x4caf50,
-        label: "Inspection VPC",
-        vpcRouteTable: inspVpcRouteTable,
-        rooms: [
-            { label: "Firewall Subnet A", color: 0xfff9c4, hasFirewall: true, subnetRouteTable: firewallSubnetRouteTableA, firewallRouteTable: firewallEndpointTableA },
-            { label: "Firewall Subnet B", color: 0xfff9c4, hasFirewall: true, subnetRouteTable: firewallSubnetRouteTableB, firewallRouteTable: firewallEndpointTableB }
-        ]
-    });
-
-    // Spoke VPCs (left/right)
-    createHouseVPC({
-        x: -18, y: 0, z: -10,
-        color: 0x2196f3,
-        label: "Spoke VPC A",
-        vpcRouteTable: tgwRouteTable,
-        rooms: [
-            { label: "Workload Subnet", color: 0xbbdefb, hasFirewall: false, subnetRouteTable: publicRouteTable }
-        ]
-    });
-    createHouseVPC({
-        x: 18, y: 0, z: -10,
-        color: 0xff9800,
-        label: "Spoke VPC B",
-        vpcRouteTable: tgwRouteTable,
-        rooms: [
-            { label: "Workload Subnet", color: 0xffe0b2, hasFirewall: false, subnetRouteTable: publicRouteTable }
-        ]
-    });
-
-    // IGW (satellite dish)
-    const igw = new THREE.Mesh(
-        new THREE.SphereGeometry(1.2, 32, 32),
-        new THREE.MeshStandardMaterial({ color: 0x90caf9 })
-    );
-    igw.position.set(0, 2, 12);
-    igw.cursor = "pointer";
-    igw.onClick = () => showRouteTablePanel(igw, publicRouteTable, "Public Route Table");
-    scene.add(igw);
-    const igwLabel = createLabel("IGW", "#2196f3");
-    igwLabel.position.set(0, 4, 12);
-    scene.add(igwLabel);
-
-    // TGW (roundabout)
-    const tgw = new THREE.Mesh(
-        new THREE.TorusGeometry(2, 0.4, 16, 100),
-        new THREE.MeshStandardMaterial({ color: 0xaaaaaa })
-    );
-    tgw.position.set(0, 1, 6);
-    tgw.cursor = "pointer";
-    tgw.onClick = () => showRouteTablePanel(tgw, tgwRouteTable, "TGW Route Table");
-    scene.add(tgw);
-    const tgwLabel = createLabel("TGW", "#666");
-    tgwLabel.position.set(0, 3, 6);
-    scene.add(tgwLabel);
-
-    // Connections (lines)
-    addConnection([0, 2, 12], [0, 1, 6], 0x2196f3); // IGW to TGW
-    addConnection([0, 1, 6], [0, 1.5, 0], 0x4caf50); // TGW to Inspection VPC
-    addConnection([0, 1, 6], [-18, 1.5, -10], 0x2196f3); // TGW to Spoke A
-    addConnection([0, 1, 6], [18, 1.5, -10], 0x2196f3); // TGW to Spoke B
-
-    // Step numbers and arrows
-    function addStepNumber(position, number) {
-        const label = createLabel(number.toString(), "#fff");
-        label.position.set(...position);
-        scene.add(label);
-    }
-    function addArrow(from, to, color = 0xff9800) {
-        const dir = new THREE.Vector3(to[0] - from[0], to[1] - from[1], to[2] - from[2]).normalize();
-        const length = Math.sqrt((to[0] - from[0]) ** 2 + (to[1] - from[1]) ** 2 + (to[2] - from[2]) ** 2);
-        const arrow = new THREE.ArrowHelper(dir, new THREE.Vector3(...from), length, color, 1, 0.5);
-        scene.add(arrow);
-    }
-    // Example steps/arrows for Centralized model
-    addStepNumber([0, 2.5, 12], 1); // IGW
-    addArrow([0, 2, 12], [0, 1, 6]); // IGW to TGW
-    addStepNumber([0, 1.5, 6], 2); // TGW
-    addArrow([0, 1, 6], [0, 1.5, 0]); // TGW to Inspection VPC
-    addStepNumber([0, 1.5, 0], 3); // Inspection VPC
-}
-
-function buildDecentralizedModel() {
-    clearScene();
-
-    // --- Helper: House (VPC) ---
-    function createHouseVPC({x, y, z, color, label, vpcRouteTable, rooms}) {
-        // Open-top, open-front house: four thin side walls and a floor
-        const vpcWidth = 12;
-        const vpcDepth = 9;
-        const vpcHeight = 3;
-        const wallThickness = 0.3;
-        const wallHeight = 2.5;
-        // Floor
-        const floor = new THREE.Mesh(
-            new THREE.BoxGeometry(vpcWidth, wallThickness, vpcDepth),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        floor.position.set(x, y + wallThickness / 2, z);
-        // Left wall
-        const leftWall = new THREE.Mesh(
-            new THREE.BoxGeometry(wallThickness, wallHeight, vpcDepth),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        leftWall.position.set(x - vpcWidth / 2 + wallThickness / 2, y + wallHeight / 2, z);
-        // Right wall
-        const rightWall = leftWall.clone();
-        rightWall.position.set(x + vpcWidth / 2 - wallThickness / 2, y + wallHeight / 2, z);
-        // Back wall
-        const backWall = new THREE.Mesh(
-            new THREE.BoxGeometry(vpcWidth, wallHeight, wallThickness),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        backWall.position.set(x, y + wallHeight / 2, z - vpcDepth / 2 + wallThickness / 2);
-        // Front wall (short, just a rim at the bottom for context)
-        const frontWall = new THREE.Mesh(
-            new THREE.BoxGeometry(vpcWidth, wallThickness, wallThickness),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        frontWall.position.set(x, y + wallThickness / 2, z + vpcDepth / 2 - wallThickness / 2);
-        // Label
-        const vpcLabel = createLabel(label, "#fff");
-        vpcLabel.position.set(x, y + wallHeight + 1.2, z);
-        // Group
-        const group = new THREE.Group();
-        group.add(floor, leftWall, rightWall, backWall, frontWall, vpcLabel);
-
-        // --- Interactivity: click house to show VPC route table
-        group.cursor = "pointer";
-        group.onClick = () => showRouteTablePanel(group, vpcRouteTable, label);
-
-        // --- Rooms (subnets) ---
-        rooms.forEach((room, idx) => {
-            // Room as a box inside the house
-            const roomBox = new THREE.Mesh(
-                new THREE.BoxGeometry(3.5, 1.5, 3.5),
-                new THREE.MeshStandardMaterial({ color: room.color, opacity: 0.7, transparent: true })
-            );
-            // Arrange rooms in a grid inside the house (spread out for new VPC size)
-            const rx = x + (idx === 0 ? -3 : 3);
-            const rz = z;
-            roomBox.position.set(rx, y + 1.5, rz);
-
-            // Room label
-            const roomLabel = createLabel(room.label, "#222");
-            roomLabel.position.set(rx, y + 3.2, rz);
-
-            // Interactivity: click room to show subnet route table
-            roomBox.cursor = "pointer";
-            roomBox.onClick = () => showRouteTablePanel(roomBox, room.subnetRouteTable, room.label);
-
-            // --- HOVER EFFECT ---
-            const origColor = room.color;
-            const hoverColor = 0x333366;
-            roomBox.onPointerOver = () => {
-                roomBox.material.color.setHex(hoverColor);
-                roomBox.material.opacity = 0.95;
-            };
-            roomBox.onPointerOut = () => {
-                roomBox.material.color.set(origColor);
-                roomBox.material.opacity = 0.7;
-            };
-
-            group.add(roomBox, roomLabel);
-
-            // --- Firewall endpoint (shield) ---
-            if (room.hasFirewall) {
-                // Shield: stylized 3D object
-                const shield = new THREE.Group();
-                const shieldBody = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.5, 1, 1.5, 32, 1, false, 0, Math.PI),
-                    new THREE.MeshStandardMaterial({ color: 0xf44336, metalness: 0.6, roughness: 0.2 })
-                );
-                shieldBody.rotation.z = Math.PI;
-                shieldBody.position.y = 0.75;
-                const shieldFace = new THREE.Mesh(
-                    new THREE.CircleGeometry(0.7, 32),
-                    new THREE.MeshStandardMaterial({ color: 0xffe082, metalness: 0.8, roughness: 0.1 })
-                );
-                shieldFace.position.z = 0.01;
-                shieldFace.position.y = 1.1;
-                shield.add(shieldBody, shieldFace);
-                shield.position.set(rx, y + 2.2, rz);
-                shield.userData = { type: "firewall", label: "Firewall Endpoint", routeTable: room.firewallRouteTable };
-
-                // Shield label
-                const shieldLabel = createLabel("Firewall", "#f44336");
-                shieldLabel.position.set(rx, y + 3.7, rz);
-
-                // Interactivity: click shield to show firewall route table
-                shield.cursor = "pointer";
-                shield.onClick = () => showRouteTablePanel(shield, room.firewallRouteTable, "Firewall Endpoint");
-
-                group.add(shield, shieldLabel);
-            }
-
-            // Add to global subnet mesh array for hover
-            allSubnetMeshes.push(roomBox);
-        });
-
-        scene.add(group);
-        return group;
-    }
-
-    // --- Route Table HTML for Decentralized Model (detailed, PDF-style) ---
-    const igwRouteTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">IGW Ingress Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>10.0.0.0/16</td><td>local</td></tr>
-                <tr><td>10.0.0.0/24</td><td>vpce-id</td></tr>
-            </tbody>
-        </table>
-    `;
-    const firewallSubnetRouteTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Firewall Subnet Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>10.0.0.0/16</td><td>local</td></tr>
-                <tr><td>0.0.0.0/0</td><td>igw-id</td></tr>
-            </tbody>
-        </table>
-    `;
-    // Example for AZ A; in a real multi-AZ, you'd show per-AZ tables
-    const protectedSubnetRouteTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Protected Subnet Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>10.0.0.0/16</td><td>local</td></tr>
-                <tr><td>0.0.0.0/0</td><td>vpce-id</td></tr>
-            </tbody>
-        </table>
-    `;
-    const firewallEndpointTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Firewall Endpoint</div>
-        <ul style="margin:0 0 0 16px;padding:0;">
-            <li>Stateful/Stateless Rules</li>
-            <li>HOME_NET: Protected Subnet CIDR</li>
-            <li>Inspect inbound/outbound traffic</li>
-        </ul>
-    `;
-
-    // --- Decentralized Model Layout ---
-    // Internet/Cloud at the top
-    const internet = new THREE.Mesh(
-        new THREE.SphereGeometry(2, 32, 32),
-        new THREE.MeshStandardMaterial({ color: 0x90caf9, transparent: true, opacity: 0.8 })
-    );
-    internet.position.set(0, 8, 0);
-    scene.add(internet);
-    const internetLabel = createLabel("Internet", "#2196f3");
-    internetLabel.position.set(0, 11, 0);
-    scene.add(internetLabel);
-
-    // Protected VPCs (each with their own firewall)
-    const vpcPositions = [
-        { x: -15, y: 0, z: -8, color: 0x4caf50, label: "Protected VPC A" },
-        { x: 15, y: 0, z: -8, color: 0x2196f3, label: "Protected VPC B" },
-        { x: -15, y: 0, z: 8, color: 0xff9800, label: "Protected VPC C" },
-        { x: 15, y: 0, z: 8, color: 0x9c27b0, label: "Protected VPC D" }
-    ];
-
-    vpcPositions.forEach((vpc, idx) => {
-        createHouseVPC({
-            x: vpc.x, y: vpc.y, z: vpc.z,
-            color: vpc.color,
-            label: vpc.label,
-            vpcRouteTable: protectedSubnetRouteTable, // Show protected subnet table for house click
-            rooms: [
-                { 
-                    label: "Protected Subnet (10.0.0.0/24)", 
-                    color: 0xfff9c4, 
-                    hasFirewall: false, 
-                    subnetRouteTable: protectedSubnetRouteTable 
-                },
-                { 
-                    label: "Firewall Subnet (10.0.1.0/28)", 
-                    color: 0xffcdd2, 
-                    hasFirewall: true, 
-                    subnetRouteTable: firewallSubnetRouteTable, 
-                    firewallRouteTable: firewallEndpointTable 
+            if (obj.material) {
+                if (Array.isArray(obj.material)) {
+                    obj.material.forEach(mat => mat.dispose());
+                } else {
+                    obj.material.dispose();
                 }
-            ]
-        });
-
-        // IGW for each VPC
-        const igw = new THREE.Mesh(
-            new THREE.SphereGeometry(0.8, 32, 32),
-            new THREE.MeshStandardMaterial({ color: 0x90caf9 })
-        );
-        igw.position.set(vpc.x, 2, vpc.z);
-        igw.cursor = "pointer";
-        igw.onClick = () => showRouteTablePanel(igw, igwRouteTable, "Internet Gateway");
-        scene.add(igw);
-
-        const igwLabel = createLabel("IGW", "#2196f3");
-        igwLabel.position.set(vpc.x, 4, vpc.z);
-        scene.add(igwLabel);
-
-        // Connections: Internet to IGW to VPC
-        addConnection([0, 8, 0], [vpc.x, 2, vpc.z], 0x2196f3); // Internet to IGW
-        addConnection([vpc.x, 2, vpc.z], [vpc.x, 1.5, vpc.z], 0x4caf50); // IGW to VPC
-    });
-
-    // Add title
-    const title = createLabel("Decentralized: Each VPC has its own firewall", "#fff");
-    title.position.set(0, -8, 0);
-    scene.add(title);
-}
-
-function buildCombinedModel() {
-    clearScene();
-
-    // --- Helper: House (VPC) ---
-    function createHouseVPC({x, y, z, color, label, vpcRouteTable, rooms}) {
-        // Open-top, open-front house: four thin side walls and a floor
-        const vpcWidth = 12;
-        const vpcDepth = 9;
-        const vpcHeight = 3;
-        const wallThickness = 0.3;
-        const wallHeight = 2.5;
-        // Floor
-        const floor = new THREE.Mesh(
-            new THREE.BoxGeometry(vpcWidth, wallThickness, vpcDepth),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        floor.position.set(x, y + wallThickness / 2, z);
-        // Left wall
-        const leftWall = new THREE.Mesh(
-            new THREE.BoxGeometry(wallThickness, wallHeight, vpcDepth),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        leftWall.position.set(x - vpcWidth / 2 + wallThickness / 2, y + wallHeight / 2, z);
-        // Right wall
-        const rightWall = leftWall.clone();
-        rightWall.position.set(x + vpcWidth / 2 - wallThickness / 2, y + wallHeight / 2, z);
-        // Back wall
-        const backWall = new THREE.Mesh(
-            new THREE.BoxGeometry(vpcWidth, wallHeight, wallThickness),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        backWall.position.set(x, y + wallHeight / 2, z - vpcDepth / 2 + wallThickness / 2);
-        // Front wall (short, just a rim at the bottom for context)
-        const frontWall = new THREE.Mesh(
-            new THREE.BoxGeometry(vpcWidth, wallThickness, wallThickness),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        frontWall.position.set(x, y + wallThickness / 2, z + vpcDepth / 2 - wallThickness / 2);
-        // Label
-        const vpcLabel = createLabel(label, "#fff");
-        vpcLabel.position.set(x, y + wallHeight + 1.2, z);
-        // Group
-        const group = new THREE.Group();
-        group.add(floor, leftWall, rightWall, backWall, frontWall, vpcLabel);
-
-        // --- Interactivity: click house to show VPC route table
-        group.cursor = "pointer";
-        group.onClick = () => showRouteTablePanel(group, vpcRouteTable, label);
-
-        // --- Rooms (subnets) ---
-        rooms.forEach((room, idx) => {
-            // Room as a box inside the house
-            const roomBox = new THREE.Mesh(
-                new THREE.BoxGeometry(3.5, 1.5, 3.5),
-                new THREE.MeshStandardMaterial({ color: room.color, opacity: 0.7, transparent: true })
-            );
-            // Arrange rooms in a grid inside the house (spread out for new VPC size)
-            const rx = x + (idx === 0 ? -3 : 3);
-            const rz = z;
-            roomBox.position.set(rx, y + 1.5, rz);
-
-            // Room label
-            const roomLabel = createLabel(room.label, "#222");
-            roomLabel.position.set(rx, y + 3.2, rz);
-
-            // Interactivity: click room to show subnet route table
-            roomBox.cursor = "pointer";
-            roomBox.onClick = () => showRouteTablePanel(roomBox, room.subnetRouteTable, room.label);
-
-            // --- HOVER EFFECT ---
-            const origColor = room.color;
-            const hoverColor = 0x333366;
-            roomBox.onPointerOver = () => {
-                roomBox.material.color.setHex(hoverColor);
-                roomBox.material.opacity = 0.95;
-            };
-            roomBox.onPointerOut = () => {
-                roomBox.material.color.set(origColor);
-                roomBox.material.opacity = 0.7;
-            };
-
-            group.add(roomBox, roomLabel);
-
-            // --- Firewall endpoint (shield) ---
-            if (room.hasFirewall) {
-                // Shield: stylized 3D object
-                const shield = new THREE.Group();
-                const shieldBody = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.5, 1, 1.5, 32, 1, false, 0, Math.PI),
-                    new THREE.MeshStandardMaterial({ color: 0xf44336, metalness: 0.6, roughness: 0.2 })
-                );
-                shieldBody.rotation.z = Math.PI;
-                shieldBody.position.y = 0.75;
-                const shieldFace = new THREE.Mesh(
-                    new THREE.CircleGeometry(0.7, 32),
-                    new THREE.MeshStandardMaterial({ color: 0xffe082, metalness: 0.8, roughness: 0.1 })
-                );
-                shieldFace.position.z = 0.01;
-                shieldFace.position.y = 1.1;
-                shield.add(shieldBody, shieldFace);
-                shield.position.set(rx, y + 2.2, rz);
-                shield.userData = { type: "firewall", label: "Firewall Endpoint", routeTable: room.firewallRouteTable };
-
-                // Shield label
-                const shieldLabel = createLabel("Firewall", "#f44336");
-                shieldLabel.position.set(rx, y + 3.7, rz);
-
-                // Interactivity: click shield to show firewall route table
-                shield.cursor = "pointer";
-                shield.onClick = () => showRouteTablePanel(shield, room.firewallRouteTable, "Firewall Endpoint");
-
-                group.add(shield, shieldLabel);
             }
-
-            // Add to global subnet mesh array for hover
-            allSubnetMeshes.push(roomBox);
+            if (obj.parent) {
+                obj.parent.remove(obj);
+            }
         });
-
-        scene.add(group);
-        return group;
+        
+        // Clear components array
+        this.components = [];
+        this.routeTables = {};
+        
+        // Update statistics
+        this.updateStatistics();
     }
 
-    // --- Route Table HTML for Combined Model ---
-    const centralVpcRouteTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Central Inspection VPC Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>Firewall Subnet (subnet-0abc1234)</td></tr>
-                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
-            </tbody>
-        </table>
-    `;
-    const spokeVpcRouteTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Spoke VPC Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>TGW (tgw-0def5678)</td></tr>
-                <tr><td>10.2.0.0/16</td><td>local</td></tr>
-            </tbody>
-        </table>
-    `;
-    const spokeWithLocalRouteTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Spoke VPC Route Table (with local IGW)</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>Local Firewall (vpce-b)</td></tr>
-                <tr><td>10.3.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
-                <tr><td>10.3.0.0/16</td><td>local</td></tr>
-            </tbody>
-        </table>
-    `;
-    const centralFirewallSubnetTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Central Firewall Subnet Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>Firewall Endpoint (vpce-a)</td></tr>
-                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
-            </tbody>
-        </table>
-    `;
-    const localFirewallSubnetTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Local Firewall Subnet Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>Internet Gateway (igw-0a1b2c3d)</td></tr>
-                <tr><td>10.3.0.0/16</td><td>local</td></tr>
-            </tbody>
-        </table>
-    `;
-    const centralFirewallTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Central Firewall Endpoint</div>
-        <ul style="margin:0 0 0 16px;padding:0;">
-            <li>Stateful/Stateless Rules</li>
-            <li>HOME_NET: All VPC CIDRs</li>
-            <li>Inspect East-West traffic</li>
-        </ul>
-    `;
-    const localFirewallTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Local Firewall Endpoint</div>
-        <ul style="margin:0 0 0 16px;padding:0;">
-            <li>Stateful/Stateless Rules</li>
-            <li>HOME_NET: Local VPC CIDR</li>
-            <li>Inspect North-South traffic</li>
-        </ul>
-    `;
-    const workloadSubnetTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Workload Subnet Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>VPC Route Table</td></tr>
-                <tr><td>10.0.0.0/16</td><td>local</td></tr>
-            </tbody>
-        </table>
-    `;
-    const protectedSubnetTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Protected Subnet Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>Local Firewall Endpoint (vpce-b)</td></tr>
-                <tr><td>10.3.0.0/16</td><td>local</td></tr>
-            </tbody>
-        </table>
-    `;
-
-    // --- Combined Model Layout ---
-    // Central Inspection VPC (center)
-    createHouseVPC({
-        x: 0, y: 0, z: 0,
-        color: 0x4caf50,
-        label: "Central Inspection VPC",
-        vpcRouteTable: centralVpcRouteTable,
-        rooms: [
-            { 
-                label: "Firewall Subnet A", 
-                color: 0xfff9c4, 
-                hasFirewall: true, 
-                subnetRouteTable: centralFirewallSubnetTable, 
-                firewallRouteTable: centralFirewallTable 
-            },
-            { 
-                label: "Firewall Subnet B", 
-                color: 0xfff9c4, 
-                hasFirewall: true, 
-                subnetRouteTable: centralFirewallSubnetTable, 
-                firewallRouteTable: centralFirewallTable 
-            }
-        ]
-    });
-
-    // Spoke VPC A (left) - Centralized only
-    createHouseVPC({
-        x: -18, y: 0, z: -10,
-        color: 0x2196f3,
-        label: "Spoke VPC A (Centralized)",
-        vpcRouteTable: spokeVpcRouteTable,
-        rooms: [
-            { 
-                label: "Workload Subnet", 
-                color: 0xbbdefb, 
-                hasFirewall: false, 
-                subnetRouteTable: workloadSubnetTable 
-            }
-        ]
-    });
-
-    // Spoke VPC B (right) - Combined (has local firewall)
-    createHouseVPC({
-        x: 18, y: 0, z: -10,
-        color: 0xff9800,
-        label: "Spoke VPC B (Combined)",
-        vpcRouteTable: spokeWithLocalRouteTable,
-        rooms: [
-            { 
-                label: "Protected Subnet", 
-                color: 0xfff9c4, 
-                hasFirewall: false, 
-                subnetRouteTable: protectedSubnetTable 
-            },
-            { 
-                label: "Local Firewall Subnet", 
-                color: 0xffcdd2, 
-                hasFirewall: true, 
-                subnetRouteTable: localFirewallSubnetTable, 
-                firewallRouteTable: localFirewallTable 
-            }
-        ]
-    });
-
-    // Central IGW (for central inspection)
-    const centralIgw = new THREE.Mesh(
-        new THREE.SphereGeometry(1.2, 32, 32),
-        new THREE.MeshStandardMaterial({ color: 0x90caf9 })
-    );
-    centralIgw.position.set(0, 2, 12);
-    scene.add(centralIgw);
-    const centralIgwLabel = createLabel("Central IGW", "#2196f3");
-    centralIgwLabel.position.set(0, 4, 12);
-    scene.add(centralIgwLabel);
-
-    // Local IGW (for Spoke VPC B)
-    const localIgw = new THREE.Mesh(
-        new THREE.SphereGeometry(0.8, 32, 32),
-        new THREE.MeshStandardMaterial({ color: 0x90caf9 })
-    );
-    localIgw.position.set(18, 2, 12);
-    scene.add(localIgw);
-    const localIgwLabel = createLabel("Local IGW", "#2196f3");
-    localIgwLabel.position.set(18, 4, 12);
-    scene.add(localIgwLabel);
-
-    // TGW (roundabout) - for East-West traffic
-    const tgw = new THREE.Mesh(
-        new THREE.TorusGeometry(2, 0.4, 16, 100),
-        new THREE.MeshStandardMaterial({ color: 0xaaaaaa })
-    );
-    tgw.position.set(0, 1, 6);
-    tgw.cursor = "pointer";
-    tgw.onClick = () => showRouteTablePanel(tgw, tgwRouteTable, "TGW Route Table");
-    scene.add(tgw);
-    const tgwLabel = createLabel("TGW", "#666");
-    tgwLabel.position.set(0, 3, 6);
-    scene.add(tgwLabel);
-
-    // Connections
-    // Central IGW to TGW
-    addConnection([0, 2, 12], [0, 1, 6], 0x2196f3);
-    // TGW to Central Inspection VPC
-    addConnection([0, 1, 6], [0, 1.5, 0], 0x4caf50);
-    // TGW to Spoke VPC A (East-West)
-    addConnection([0, 1, 6], [-18, 1.5, -10], 0x2196f3);
-    // TGW to Spoke VPC B (East-West)
-    addConnection([0, 1, 6], [18, 1.5, -10], 0x2196f3);
-    // Local IGW to Spoke VPC B (North-South)
-    addConnection([18, 2, 12], [18, 1.5, -10], 0xff9800);
-
-    // Add traffic flow labels
-    const eastWestLabel = createLabel("East-West Traffic", "#4caf50");
-    eastWestLabel.position.set(-8, 5, 0);
-    scene.add(eastWestLabel);
-
-    const northSouthLabel = createLabel("North-South Traffic", "#ff5722");
-    northSouthLabel.position.set(18, 5, 0);
-    scene.add(northSouthLabel);
-
-    // Add title
-    const title = createLabel("Combined: Central East-West + Local North-South", "#fff");
-    title.position.set(0, -8, 0);
-    scene.add(title);
-}
-
-function buildNorthSouthIngressModel() {
-    clearScene();
-
-    // --- Helper: House (VPC) ---
-    function createHouseVPC({x, y, z, color, label, vpcRouteTable, rooms}) {
-        // Open-top, open-front house: four thin side walls and a floor
-        const vpcWidth = 12;
-        const vpcDepth = 9;
-        const vpcHeight = 3;
-        const wallThickness = 0.3;
-        const wallHeight = 2.5;
-        // Floor
-        const floor = new THREE.Mesh(
-            new THREE.BoxGeometry(vpcWidth, wallThickness, vpcDepth),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        floor.position.set(x, y + wallThickness / 2, z);
-        // Left wall
-        const leftWall = new THREE.Mesh(
-            new THREE.BoxGeometry(wallThickness, wallHeight, vpcDepth),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        leftWall.position.set(x - vpcWidth / 2 + wallThickness / 2, y + wallHeight / 2, z);
-        // Right wall
-        const rightWall = leftWall.clone();
-        rightWall.position.set(x + vpcWidth / 2 - wallThickness / 2, y + wallHeight / 2, z);
-        // Back wall
-        const backWall = new THREE.Mesh(
-            new THREE.BoxGeometry(vpcWidth, wallHeight, wallThickness),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        backWall.position.set(x, y + wallHeight / 2, z - vpcDepth / 2 + wallThickness / 2);
-        // Front wall (short, just a rim at the bottom for context)
-        const frontWall = new THREE.Mesh(
-            new THREE.BoxGeometry(vpcWidth, wallThickness, wallThickness),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        frontWall.position.set(x, y + wallThickness / 2, z + vpcDepth / 2 - wallThickness / 2);
-        // Label
-        const vpcLabel = createLabel(label, "#fff");
-        vpcLabel.position.set(x, y + wallHeight + 1.2, z);
-        // Group
-        const group = new THREE.Group();
-        group.add(floor, leftWall, rightWall, backWall, frontWall, vpcLabel);
-
-        // --- Interactivity: click house to show VPC route table
-        group.cursor = "pointer";
-        group.onClick = () => showRouteTablePanel(group, vpcRouteTable, label);
-
-        // --- Rooms (subnets) ---
-        rooms.forEach((room, idx) => {
-            // Room as a box inside the house
-            const roomBox = new THREE.Mesh(
-                new THREE.BoxGeometry(2.5, 1.5, 2.5),
-                new THREE.MeshStandardMaterial({ color: room.color, opacity: 0.7, transparent: true })
-            );
-            // Arrange rooms in a grid inside the house
-            const rx = x + (idx === 0 ? -2 : 2);
-            const rz = z;
-            roomBox.position.set(rx, y + 1.5, rz);
-
-            // Room label
-            const roomLabel = createLabel(room.label, "#222");
-            roomLabel.position.set(rx, y + 3.2, rz);
-
-            // Interactivity: click room to show subnet route table
-            roomBox.cursor = "pointer";
-            roomBox.onClick = () => showRouteTablePanel(roomBox, room.subnetRouteTable, room.label);
-
-            group.add(roomBox, roomLabel);
-
-            // --- Firewall endpoint (shield) ---
-            if (room.hasFirewall) {
-                // Shield: stylized 3D object
-                const shield = new THREE.Group();
-                const shieldBody = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.5, 1, 1.5, 32, 1, false, 0, Math.PI),
-                    new THREE.MeshStandardMaterial({ color: 0xf44336, metalness: 0.6, roughness: 0.2 })
-                );
-                shieldBody.rotation.z = Math.PI;
-                shieldBody.position.y = 0.75;
-                const shieldFace = new THREE.Mesh(
-                    new THREE.CircleGeometry(0.7, 32),
-                    new THREE.MeshStandardMaterial({ color: 0xffe082, metalness: 0.8, roughness: 0.1 })
-                );
-                shieldFace.position.z = 0.01;
-                shieldFace.position.y = 1.1;
-                shield.add(shieldBody, shieldFace);
-                shield.position.set(rx, y + 2.2, rz);
-                shield.userData = { type: "firewall", label: "Firewall Endpoint", routeTable: room.firewallRouteTable };
-
-                // Shield label
-                const shieldLabel = createLabel("Firewall", "#f44336");
-                shieldLabel.position.set(rx, y + 3.7, rz);
-
-                // Interactivity: click shield to show firewall route table
-                shield.cursor = "pointer";
-                shield.onClick = () => showRouteTablePanel(shield, room.firewallRouteTable, "Firewall Endpoint");
-
-                group.add(shield, shieldLabel);
-            }
-
-            // Add to global subnet mesh array for hover
-            allSubnetMeshes.push(roomBox);
-        });
-
-        scene.add(group);
-        return group;
+    exportImage() {
+        this.renderer.render(this.scene, this.camera);
+        const dataURL = this.renderer.domElement.toDataURL('image/png');
+        
+        const link = document.createElement('a');
+        link.download = 'aws-network-firewall-3d-architecture.png';
+        link.href = dataURL;
+        link.click();
     }
 
-    // --- Route Table HTML for North-South Ingress Model ---
-    const edgeVpcRouteTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Edge (Ingress) VPC Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>Firewall Subnet (subnet-0abc1234)</td></tr>
-                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
-            </tbody>
-        </table>
-    `;
-    const spokeVpcRouteTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Spoke VPC Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>TGW (tgw-0def5678)</td></tr>
-                <tr><td>10.2.0.0/16</td><td>local</td></tr>
-            </tbody>
-        </table>
-    `;
-    const firewallSubnetTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Firewall Subnet Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>Firewall Endpoint (vpce-c)</td></tr>
-                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
-            </tbody>
-        </table>
-    `;
-    const firewallEndpointTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Firewall Endpoint</div>
-        <ul style="margin:0 0 0 16px;padding:0;">
-            <li>Stateful/Stateless Rules</li>
-            <li>HOME_NET: Spoke VPC CIDRs</li>
-            <li>Inspect inbound/outbound traffic</li>
-        </ul>
-    `;
-    const igwRouteTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">IGW Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>Firewall Endpoint (vpce-c)</td></tr>
-            </tbody>
-        </table>
-    `;
-
-    // --- North-South Ingress Model Layout ---
-    // Internet/Cloud at the top
-    const internet = new THREE.Mesh(
-        new THREE.SphereGeometry(2, 32, 32),
-        new THREE.MeshStandardMaterial({ color: 0x90caf9, transparent: true, opacity: 0.8 })
-    );
-    internet.position.set(0, 12, 0);
-    scene.add(internet);
-    const internetLabel = createLabel("Internet", "#2196f3");
-    internetLabel.position.set(0, 15, 0);
-    scene.add(internetLabel);
-
-    // Edge (Ingress) VPC (top center)
-    createHouseVPC({
-        x: 0, y: 6, z: 0,
-        color: 0xff5722,
-        label: "Edge (Ingress) VPC",
-        vpcRouteTable: edgeVpcRouteTable,
-        rooms: [
-            { 
-                label: "Firewall Subnet A", 
-                color: 0xfff9c4, 
-                hasFirewall: true, 
-                subnetRouteTable: firewallSubnetTable, 
-                firewallRouteTable: firewallEndpointTable 
-            },
-            { 
-                label: "Firewall Subnet B", 
-                color: 0xfff9c4, 
-                hasFirewall: true, 
-                subnetRouteTable: firewallSubnetTable, 
-                firewallRouteTable: firewallEndpointTable 
-            }
-        ]
-    });
-
-    // IGW (for ingress traffic)
-    const igw = new THREE.Mesh(
-        new THREE.SphereGeometry(1.2, 32, 32),
-        new THREE.MeshStandardMaterial({ color: 0x90caf9 })
-    );
-    igw.position.set(0, 9, 0);
-    igw.cursor = "pointer";
-    igw.onClick = () => showRouteTablePanel(igw, igwRouteTable, "Internet Gateway");
-    scene.add(igw);
-    const igwLabel = createLabel("IGW", "#2196f3");
-    igwLabel.position.set(0, 11, 0);
-    scene.add(igwLabel);
-
-    // TGW (roundabout) - distributes inspected traffic
-    const tgw = new THREE.Mesh(
-        new THREE.TorusGeometry(2, 0.4, 16, 100),
-        new THREE.MeshStandardMaterial({ color: 0xaaaaaa })
-    );
-    tgw.position.set(0, 3, 0);
-    scene.add(tgw);
-    const tgwLabel = createLabel("TGW", "#666");
-    tgwLabel.position.set(0, 5, 0);
-    scene.add(tgwLabel);
-
-    // Spoke VPCs (bottom)
-    const spokePositions = [
-        { x: -15, y: 0, z: -8, color: 0x4caf50, label: "Spoke VPC A" },
-        { x: 15, y: 0, z: -8, color: 0x2196f3, label: "Spoke VPC B" },
-        { x: -15, y: 0, z: 8, color: 0xff9800, label: "Spoke VPC C" },
-        { x: 15, y: 0, z: 8, color: 0x9c27b0, label: "Spoke VPC D" }
-    ];
-
-    spokePositions.forEach((spoke, idx) => {
-        createHouseVPC({
-            x: spoke.x, y: spoke.y, z: spoke.z,
-            color: spoke.color,
-            label: spoke.label,
-            vpcRouteTable: spokeVpcRouteTable,
-            rooms: [
-                { 
-                    label: "Workload Subnet", 
-                    color: 0xbbdefb, 
-                    hasFirewall: false, 
-                    subnetRouteTable: workloadSubnetTable 
-                }
-            ]
-        });
-
-        // Connection from TGW to Spoke VPC
-        addConnection([0, 3, 0], [spoke.x, 1.5, spoke.z], 0x4caf50);
-    });
-
-    // Connections
-    // Internet to IGW
-    addConnection([0, 12, 0], [0, 9, 0], 0x2196f3);
-    // IGW to Edge VPC
-    addConnection([0, 9, 0], [0, 7.5, 0], 0xff5722);
-    // Edge VPC to TGW
-    addConnection([0, 4.5, 0], [0, 3, 0], 0xaaaaaa);
-
-    // Add traffic flow labels
-    const inboundLabel = createLabel("Inbound Traffic", "#ff5722");
-    inboundLabel.position.set(0, 8, 0);
-    scene.add(inboundLabel);
-
-    const outboundLabel = createLabel("Outbound Traffic", "#4caf50");
-    outboundLabel.position.set(0, 1, 0);
-    scene.add(outboundLabel);
-
-    // Add title
-    const title = createLabel("North-South Ingress: Centralized Inbound Inspection", "#fff");
-    title.position.set(0, -8, 0);
-    scene.add(title);
-}
-
-function buildCentralizedDedicatedModel() {
-    clearScene();
-
-    // --- Helper: House (VPC) ---
-    function createHouseVPC({x, y, z, color, label, vpcRouteTable, rooms}) {
-        // Open-top, open-front house: four thin side walls and a floor
-        const vpcWidth = 12;
-        const vpcDepth = 9;
-        const vpcHeight = 3;
-        const wallThickness = 0.3;
-        const wallHeight = 2.5;
-        // Floor
-        const floor = new THREE.Mesh(
-            new THREE.BoxGeometry(vpcWidth, wallThickness, vpcDepth),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        floor.position.set(x, y + wallThickness / 2, z);
-        // Left wall
-        const leftWall = new THREE.Mesh(
-            new THREE.BoxGeometry(wallThickness, wallHeight, vpcDepth),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        leftWall.position.set(x - vpcWidth / 2 + wallThickness / 2, y + wallHeight / 2, z);
-        // Right wall
-        const rightWall = leftWall.clone();
-        rightWall.position.set(x + vpcWidth / 2 - wallThickness / 2, y + wallHeight / 2, z);
-        // Back wall
-        const backWall = new THREE.Mesh(
-            new THREE.BoxGeometry(vpcWidth, wallHeight, wallThickness),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        backWall.position.set(x, y + wallHeight / 2, z - vpcDepth / 2 + wallThickness / 2);
-        // Front wall (short, just a rim at the bottom for context)
-        const frontWall = new THREE.Mesh(
-            new THREE.BoxGeometry(vpcWidth, wallThickness, wallThickness),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.5, opacity: 1, transparent: false })
-        );
-        frontWall.position.set(x, y + wallThickness / 2, z + vpcDepth / 2 - wallThickness / 2);
-        // Label
-        const vpcLabel = createLabel(label, "#fff");
-        vpcLabel.position.set(x, y + wallHeight + 1.2, z);
-        // Group
-        const group = new THREE.Group();
-        group.add(floor, leftWall, rightWall, backWall, frontWall, vpcLabel);
-
-        // --- Interactivity: click house to show VPC route table
-        group.cursor = "pointer";
-        group.onClick = () => showRouteTablePanel(group, vpcRouteTable, label);
-
-        // --- Rooms (subnets) ---
-        rooms.forEach((room, idx) => {
-            // Room as a box inside the house
-            const roomBox = new THREE.Mesh(
-                new THREE.BoxGeometry(2.5, 1.5, 2.5),
-                new THREE.MeshStandardMaterial({ color: room.color, opacity: 0.7, transparent: true })
-            );
-            // Arrange rooms in a grid inside the house
-            const rx = x + (idx === 0 ? -2 : 2);
-            const rz = z;
-            roomBox.position.set(rx, y + 1.5, rz);
-
-            // Room label
-            const roomLabel = createLabel(room.label, "#222");
-            roomLabel.position.set(rx, y + 3.2, rz);
-
-            // Interactivity: click room to show subnet route table
-            roomBox.cursor = "pointer";
-            roomBox.onClick = () => showRouteTablePanel(roomBox, room.subnetRouteTable, room.label);
-
-            group.add(roomBox, roomLabel);
-
-            // --- Firewall endpoint (shield) ---
-            if (room.hasFirewall) {
-                // Shield: stylized 3D object
-                const shield = new THREE.Group();
-                const shieldBody = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.5, 1, 1.5, 32, 1, false, 0, Math.PI),
-                    new THREE.MeshStandardMaterial({ color: 0xf44336, metalness: 0.6, roughness: 0.2 })
-                );
-                shieldBody.rotation.z = Math.PI;
-                shieldBody.position.y = 0.75;
-                const shieldFace = new THREE.Mesh(
-                    new THREE.CircleGeometry(0.7, 32),
-                    new THREE.MeshStandardMaterial({ color: 0xffe082, metalness: 0.8, roughness: 0.1 })
-                );
-                shieldFace.position.z = 0.01;
-                shieldFace.position.y = 1.1;
-                shield.add(shieldBody, shieldFace);
-                shield.position.set(rx, y + 2.2, rz);
-                shield.userData = { type: "firewall", label: "Firewall Endpoint", routeTable: room.firewallRouteTable };
-
-                // Shield label
-                const shieldLabel = createLabel("Firewall", "#f44336");
-                shieldLabel.position.set(rx, y + 3.7, rz);
-
-                // Interactivity: click shield to show firewall route table
-                shield.cursor = "pointer";
-                shield.onClick = () => showRouteTablePanel(shield, room.firewallRouteTable, "Firewall Endpoint");
-
-                group.add(shield, shieldLabel);
-            }
-
-            // Add to global subnet mesh array for hover
-            allSubnetMeshes.push(roomBox);
-        });
-
-        scene.add(group);
-        return group;
+    saveProject() {
+        const projectData = {
+            components: this.components.map(comp => ({
+                type: comp.type,
+                label: comp.label,
+                position: comp.object.position.toArray(),
+                userData: comp.object.userData
+            })),
+            routeTables: this.routeTables,
+            timestamp: new Date().toISOString()
+        };
+        
+        const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+        const link = document.createElement('a');
+        link.download = 'aws-firewall-3d-project.json';
+        link.href = URL.createObjectURL(blob);
+        link.click();
     }
 
-    // --- Route Table HTML for Centralized Dedicated Model ---
-    const inspectionVpcRouteTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Inspection VPC Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>Firewall Subnet (subnet-0abc1234)</td></tr>
-                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
-            </tbody>
-        </table>
-    `;
-    const egressVpcRouteTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Egress VPC Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>Firewall Subnet (subnet-0abc1234)</td></tr>
-                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
-            </tbody>
-        </table>
-    `;
-    const spokeVpcRouteTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Spoke VPC Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>TGW (tgw-0def5678)</td></tr>
-                <tr><td>10.2.0.0/16</td><td>local</td></tr>
-            </tbody>
-        </table>
-    `;
-    const inspectionFirewallSubnetTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Inspection Firewall Subnet Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>Firewall Endpoint (vpce-d)</td></tr>
-                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
-            </tbody>
-        </table>
-    `;
-    const egressFirewallSubnetTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Egress Firewall Subnet Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>Firewall Endpoint (vpce-e)</td></tr>
-                <tr><td>10.1.0.0/16</td><td>TGW (tgw-0def5678)</td></tr>
-            </tbody>
-        </table>
-    `;
-    const inspectionFirewallTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Inspection Firewall Endpoint</div>
-        <ul style="margin:0 0 0 16px;padding:0;">
-            <li>Stateful/Stateless Rules</li>
-            <li>HOME_NET: All VPC CIDRs</li>
-            <li>Dedicated East-West inspection</li>
-            <li>Inter-VPC traffic analysis</li>
-        </ul>
-    `;
-    const egressFirewallTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Egress Firewall Endpoint</div>
-        <ul style="margin:0 0 0 16px;padding:0;">
-            <li>Stateful/Stateless Rules</li>
-            <li>HOME_NET: All VPC CIDRs</li>
-            <li>Dedicated North-South inspection</li>
-            <li>Internet traffic analysis</li>
-        </ul>
-    `;
-    const workloadSubnetTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">Workload Subnet Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>VPC Route Table</td></tr>
-                <tr><td>10.0.0.0/16</td><td>local</td></tr>
-            </tbody>
-        </table>
-    `;
-    const natGatewayTable = `
-        <div style="margin-bottom:8px;font-weight:bold;">NAT Gateway Route Table</div>
-        <table class="route-table">
-            <thead><tr><th>Destination</th><th>Target</th></tr></thead>
-            <tbody>
-                <tr><td>0.0.0.0/0</td><td>Internet Gateway (igw-0a1b2c3d)</td></tr>
-                <tr><td>10.2.0.0/16</td><td>local</td></tr>
-            </tbody>
-        </table>
-    `;
+    showHelp() {
+        document.getElementById('helpModal').style.display = 'block';
+    }
 
-    // --- Centralized Dedicated Model Layout ---
-    // Internet/Cloud at the top
-    const internet = new THREE.Mesh(
-        new THREE.SphereGeometry(2, 32, 32),
-        new THREE.MeshStandardMaterial({ color: 0x90caf9, transparent: true, opacity: 0.8 })
-    );
-    internet.position.set(0, 12, 0);
-    scene.add(internet);
-    const internetLabel = createLabel("Internet", "#2196f3");
-    internetLabel.position.set(0, 15, 0);
-    scene.add(internetLabel);
+    hideHelp() {
+        document.getElementById('helpModal').style.display = 'none';
+    }
 
-    // Inspection VPC (left) - dedicated East-West inspection
-    createHouseVPC({
-        x: -15, y: 6, z: 0,
-        color: 0x4caf50,
-        label: "Inspection VPC",
-        vpcRouteTable: inspectionVpcRouteTable,
-        rooms: [
-            { 
-                label: "Firewall Subnet A", 
-                color: 0xfff9c4, 
-                hasFirewall: true, 
-                subnetRouteTable: inspectionFirewallSubnetTable, 
-                firewallRouteTable: inspectionFirewallTable 
-            },
-            { 
-                label: "Firewall Subnet B", 
-                color: 0xfff9c4, 
-                hasFirewall: true, 
-                subnetRouteTable: inspectionFirewallSubnetTable, 
-                firewallRouteTable: inspectionFirewallTable 
+    onMouseClick(event) {
+        const mouse = new THREE.Vector2();
+        mouse.x = (event.clientX / this.renderer.domElement.clientWidth) * 2 - 1;
+        mouse.y = -(event.clientY / this.renderer.domElement.clientHeight) * 2 + 1;
+        
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, this.camera);
+        
+        const intersects = raycaster.intersectObjects(this.scene.children, true);
+        
+        if (intersects.length > 0) {
+            const object = intersects[0].object;
+            const component = this.components.find(comp => comp.object === object || comp.object.children.includes(object));
+            
+            if (component) {
+                this.showComponentInfo(component.object, component.type, this.getComponentInfo(component.type, component.label));
             }
-        ]
-    });
-
-    // Egress VPC (right) - dedicated North-South egress
-    createHouseVPC({
-        x: 15, y: 6, z: 0,
-        color: 0xff5722,
-        label: "Egress VPC",
-        vpcRouteTable: egressVpcRouteTable,
-        rooms: [
-            { 
-                label: "Firewall Subnet A", 
-                color: 0xffcdd2, 
-                hasFirewall: true, 
-                subnetRouteTable: egressFirewallSubnetTable, 
-                firewallRouteTable: egressFirewallTable 
-            },
-            { 
-                label: "Public Subnet", 
-                color: 0xbbdefb, 
-                hasFirewall: false, 
-                subnetRouteTable: workloadSubnetTable 
-            }
-        ]
-    });
-
-    // IGW (for egress traffic)
-    const igw = new THREE.Mesh(
-        new THREE.SphereGeometry(1.2, 32, 32),
-        new THREE.MeshStandardMaterial({ color: 0x90caf9 })
-    );
-    igw.position.set(15, 9, 0);
-    igw.cursor = "pointer";
-    igw.onClick = () => showRouteTablePanel(igw, natGatewayTable, "Internet Gateway");
-    scene.add(igw);
-    const igwLabel = createLabel("IGW", "#2196f3");
-    igwLabel.position.set(15, 11, 0);
-    scene.add(igwLabel);
-
-    // NAT Gateway (in egress VPC)
-    const nat = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.8, 0.8, 1.5, 32),
-        new THREE.MeshStandardMaterial({ color: 0x9e9e9e })
-    );
-    nat.position.set(15, 4.5, 0);
-    nat.cursor = "pointer";
-    nat.onClick = () => showRouteTablePanel(nat, natGatewayTable, "NAT Gateway");
-    scene.add(nat);
-    const natLabel = createLabel("NAT", "#666");
-    natLabel.position.set(15, 6.5, 0);
-    scene.add(natLabel);
-
-    // TGW (roundabout) - connects all VPCs
-    const tgw = new THREE.Mesh(
-        new THREE.TorusGeometry(2, 0.4, 16, 100),
-        new THREE.MeshStandardMaterial({ color: 0xaaaaaa })
-    );
-    tgw.position.set(0, 3, 0);
-    scene.add(tgw);
-    const tgwLabel = createLabel("TGW", "#666");
-    tgwLabel.position.set(0, 5, 0);
-    scene.add(tgwLabel);
-
-    // Spoke VPCs (bottom)
-    const spokePositions = [
-        { x: -20, y: 0, z: -8, color: 0x2196f3, label: "Spoke VPC A" },
-        { x: 20, y: 0, z: -8, color: 0xff9800, label: "Spoke VPC B" },
-        { x: -20, y: 0, z: 8, color: 0x9c27b0, label: "Spoke VPC C" },
-        { x: 20, y: 0, z: 8, color: 0x607d8b, label: "Spoke VPC D" }
-    ];
-
-    spokePositions.forEach((spoke, idx) => {
-        createHouseVPC({
-            x: spoke.x, y: spoke.y, z: spoke.z,
-            color: spoke.color,
-            label: spoke.label,
-            vpcRouteTable: spokeVpcRouteTable,
-            rooms: [
-                { 
-                    label: "Workload Subnet", 
-                    color: 0xbbdefb, 
-                    hasFirewall: false, 
-                    subnetRouteTable: workloadSubnetTable 
-                }
-            ]
-        });
-
-        // Connection from TGW to Spoke VPC
-        addConnection([0, 3, 0], [spoke.x, 1.5, spoke.z], 0x4caf50);
-    });
-
-    // Connections
-    // Internet to IGW
-    addConnection([0, 12, 0], [15, 9, 0], 0x2196f3);
-    // IGW to Egress VPC
-    addConnection([15, 9, 0], [15, 7.5, 0], 0xff5722);
-    // Egress VPC to TGW
-    addConnection([15, 4.5, 0], [0, 3, 0], 0xaaaaaa);
-    // Inspection VPC to TGW
-    addConnection([-15, 4.5, 0], [0, 3, 0], 0xaaaaaa);
-
-    // Add traffic flow labels
-    const eastWestLabel = createLabel("East-West Traffic", "#4caf50");
-    eastWestLabel.position.set(-15, 8, 0);
-    scene.add(eastWestLabel);
-
-    const northSouthLabel = createLabel("North-South Traffic", "#ff5722");
-    northSouthLabel.position.set(15, 8, 0);
-    scene.add(northSouthLabel);
-
-    // Add title
-    const title = createLabel("Centralized Dedicated: Separate East-West & North-South Firewalls", "#fff");
-    title.position.set(0, -8, 0);
-    scene.add(title);
-}
-
-// --- Route Table Panel Logic ---
-function showRouteTablePanel(object, html, title) {
-    const panel = document.getElementById('route-table-panel');
-    panel.innerHTML = `<h3 style="margin-top:0">${title}</h3>${html}`;
-    panel.style.display = 'block';
-
-    // Project 3D position to 2D screen
-    const pos = object.position || (object.parent && object.parent.position) || new THREE.Vector3();
-    const vector = pos.clone().project(camera);
-    const x = (vector.x * 0.5 + 0.5) * container.clientWidth;
-    const y = (-vector.y * 0.5 + 0.5) * container.clientHeight;
-    panel.style.left = `${x + 20}px`;
-    panel.style.top = `${y - 20}px`;
-}
-
-// --- Interactivity: Raycaster for clicks ---
-const raycaster = new THREE.Raycaster();
-const mouse = new THREE.Vector2();
-renderer.domElement.addEventListener('click', (event) => {
-    mouse.x = (event.clientX / renderer.domElement.clientWidth) * 2 - 1;
-    mouse.y = -(event.clientY / renderer.domElement.clientHeight) * 2 + 1;
-    raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(scene.children, true);
-    for (let i = 0; i < intersects.length; i++) {
-        const obj = intersects[i].object;
-        if (obj.onClick) {
-            obj.onClick();
-            return;
-        }
-        if (obj.parent && obj.parent.onClick) {
-            obj.parent.onClick();
-            return;
         }
     }
-    // Clicked empty space: hide panel
-    document.getElementById('route-table-panel').style.display = 'none';
-});
 
-// --- Add raycaster for hover effect on subnets ---
-const pointer = new THREE.Vector2();
-let lastHovered = null;
-renderer.domElement.addEventListener('mousemove', (event) => {
-    pointer.x = (event.clientX / renderer.domElement.clientWidth) * 2 - 1;
-    pointer.y = -(event.clientY / renderer.domElement.clientHeight) * 2 + 1;
-    raycaster.setFromCamera(pointer, camera);
-    const intersects = raycaster.intersectObjects(allSubnetMeshes, true);
-    let found = false;
-    for (let i = 0; i < intersects.length; i++) {
-        const obj = intersects[i].object;
-        if (obj.onPointerOver) {
-            if (lastHovered && lastHovered !== obj && lastHovered.onPointerOut) lastHovered.onPointerOut();
-            obj.onPointerOver();
-            lastHovered = obj;
-            found = true;
-            break;
+    onMouseMove(event) {
+        const mouse = new THREE.Vector2();
+        mouse.x = (event.clientX / this.renderer.domElement.clientWidth) * 2 - 1;
+        mouse.y = -(event.clientY / this.renderer.domElement.clientHeight) * 2 + 1;
+        
+        document.getElementById('mousePosition').textContent = 
+            `3D View: X: ${mouse.x.toFixed(2)}, Y: ${mouse.y.toFixed(2)}`;
+    }
+
+    getComponentInfo(type, label) {
+        const infoMap = {
+            'vpc': this.getVPCInfo.bind(this),
+            'subnet': this.getSubnetInfo.bind(this),
+            'firewall': this.getFirewallInfo.bind(this),
+            'internet-gateway': this.getIGWInfo.bind(this),
+            'nat-gateway': this.getNATInfo.bind(this),
+            'load-balancer': this.getLBInfo.bind(this)
+        };
+        
+        return infoMap[type] ? infoMap[type](label) : {
+            description: `${type} - ${label}`,
+            features: ['3D component'],
+            bestPractices: ['Configure according to AWS best practices']
+        };
+    }
+
+    updateTrafficType(type) {
+        console.log('Traffic type changed to:', type);
+    }
+
+    updateAnimationSpeed(speed) {
+        console.log('Animation speed changed to:', speed);
+    }
+
+    toggleRouteTables(show) {
+        const routeTablesPanel = document.querySelector('.route-tables');
+        if (routeTablesPanel) {
+            routeTablesPanel.style.display = show ? 'block' : 'none';
+        }
+        
+        // Update the display when toggled on
+        if (show) {
+            this.updateRouteTablesDisplay();
+        }
+        
+        console.log('Route tables visibility:', show);
+    }
+
+    toggleTrafficFlow(show) {
+        console.log('Traffic flow visibility:', show);
+    }
+
+    updateStatistics() {
+        // Count different component types
+        const counts = {
+            vpcs: 0,
+            firewalls: 0,
+            subnets: 0,
+            gateways: 0,
+            transitGateways: 0
+        };
+        
+        this.components.forEach(comp => {
+            if (comp.type === 'vpc') counts.vpcs++;
+            else if (comp.type === 'firewall') counts.firewalls++;
+            else if (comp.type === 'subnet') counts.subnets++;
+            else if (comp.type === 'gateway') counts.gateways++;
+            else if (comp.type === 'transit-gateway') counts.transitGateways++;
+        });
+        
+        // Update UI statistics
+        const statsElement = document.querySelector('.stats-content');
+        if (statsElement) {
+            statsElement.innerHTML = `
+                <div class="stat-item">
+                    <span class="stat-label">VPCs</span>
+                    <span class="stat-value">${counts.vpcs}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Firewalls</span>
+                    <span class="stat-value">${counts.firewalls}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Subnets</span>
+                    <span class="stat-value">${counts.subnets}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Gateways</span>
+                    <span class="stat-value">${counts.gateways + counts.transitGateways}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">3D Traffic Flow</span>
+                    <span class="stat-value">0 packets/s</span>
+                </div>
+            `;
         }
     }
-    if (!found && lastHovered && lastHovered.onPointerOut) {
-        lastHovered.onPointerOut();
-        lastHovered = null;
+
+    showLoading() {
+        document.getElementById('loadingOverlay').style.display = 'flex';
+    }
+
+    hideLoading() {
+        console.log('Hiding loading overlay');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        if (loadingOverlay) {
+            loadingOverlay.style.display = 'none';
+        }
+    }
+
+    onWindowResize() {
+        this.camera.aspect = this.container.clientWidth / this.container.clientHeight;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+    }
+
+    animate() {
+        requestAnimationFrame(() => this.animate());
+        this.controls.update();
+        this.renderer.render(this.scene, this.camera);
+    }
+
+    delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    addComponent(componentType) {
+        if (this.currentMode !== 'design') return;
+        
+        const center = new THREE.Vector3(0, 0, 0);
+        const x = center.x + (Math.random() - 0.5) * 20;
+        const y = center.y + (Math.random() - 0.5) * 20;
+        const z = center.z + (Math.random() - 0.5) * 20;
+        
+        switch (componentType) {
+            case 'vpc':
+                this.createVPC(x, y, z, 'New VPC', '#3498db');
+                break;
+            case 'subnet':
+                this.createSubnet(x, y, z, 'New Subnet', '#e74c3c');
+                break;
+            case 'firewall':
+                this.createFirewall(x, y, z, 'New Firewall');
+                break;
+            case 'internet-gateway':
+                this.createInternetGateway(x, y, z, 'New Internet Gateway');
+                break;
+            case 'nat-gateway':
+                this.createNATGateway(x, y, z, 'New NAT Gateway');
+                break;
+            case 'load-balancer':
+                this.createLoadBalancer(x, y, z, 'New Load Balancer');
+                break;
+        }
+        
+        this.updateStatistics();
+    }
+
+    // Information methods
+    getVPCInfo(label) {
+        return {
+            description: `Virtual Private Cloud (VPC) - ${label}`,
+            features: [
+                'Isolated network environment',
+                'Custom IP address ranges',
+                'Subnet configuration',
+                'Route table management',
+                'Security group association'
+            ],
+            bestPractices: [
+                'Use private subnets for sensitive resources',
+                'Implement proper route table configurations',
+                'Use security groups for traffic control',
+                'Consider VPC peering for multi-VPC architectures'
+            ]
+        };
+    }
+
+    getSubnetInfo(label) {
+        return {
+            description: `Subnet - ${label}`,
+            features: [
+                'Logical subdivision of VPC',
+                'Availability Zone placement',
+                'Route table association',
+                'Network ACL configuration',
+                'Security group assignment'
+            ],
+            bestPractices: [
+                'Use public subnets for internet-facing resources',
+                'Use private subnets for internal resources',
+                'Distribute subnets across multiple AZs',
+                'Use appropriate CIDR blocks'
+            ]
+        };
+    }
+
+    getFirewallInfo(label) {
+        return {
+            description: `Network Firewall - ${label}`,
+            features: [
+                'Stateful packet inspection',
+                'Intrusion prevention system',
+                'Web filtering capabilities',
+                'Threat intelligence integration',
+                'High availability deployment'
+            ],
+            bestPractices: [
+                'Deploy in multiple AZs for high availability',
+                'Configure proper rule sets',
+                'Monitor firewall logs regularly',
+                'Update threat intelligence feeds',
+                'Test firewall rules in staging environment'
+            ]
+        };
+    }
+
+    getIGWInfo() {
+        return {
+            description: 'Internet Gateway',
+            features: [
+                'Provides internet connectivity',
+                'One per VPC',
+                'Automatically scales',
+                'Highly available',
+                'No additional charges'
+            ],
+            bestPractices: [
+                'Attach to VPC for internet access',
+                'Use with public subnets',
+                'Configure route tables properly',
+                'Monitor for unauthorized access'
+            ]
+        };
+    }
+
+    getNATInfo() {
+        return {
+            description: 'NAT Gateway',
+            features: [
+                'Network Address Translation',
+                'Outbound internet access',
+                'High availability',
+                'Automatic scaling',
+                'Per-hour and data processing charges'
+            ],
+            bestPractices: [
+                'Deploy in public subnets',
+                'Use for private subnet internet access',
+                'Configure proper route tables',
+                'Monitor costs and usage'
+            ]
+        };
+    }
+
+    getLBInfo() {
+        return {
+            description: 'Load Balancer',
+            features: [
+                'Distributes incoming traffic',
+                'Health checks',
+                'SSL/TLS termination',
+                'Session affinity',
+                'Auto scaling integration'
+            ],
+            bestPractices: [
+                'Deploy across multiple AZs',
+                'Configure health checks',
+                'Use appropriate load balancer type',
+                'Monitor performance metrics',
+                'Implement proper security groups'
+            ]
+        };
+    }
+}
+
+// Initialize the 3D simulator when the page loads
+document.addEventListener('DOMContentLoaded', () => {
+    // Show loading overlay
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (loadingOverlay) {
+        loadingOverlay.style.display = 'flex';
+    }
+    
+    // Set a timeout to prevent infinite loading
+    const loadingTimeout = setTimeout(() => {
+        console.warn('Loading timeout reached, showing fallback');
+        if (loadingOverlay) {
+            loadingOverlay.style.display = 'none';
+        }
+        const container = document.getElementById('canvas-3d');
+        if (container && !window.simulator3D) {
+            container.innerHTML = `
+                <div style="
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    height: 100%;
+                    color: white;
+                    text-align: center;
+                    padding: 20px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    border-radius: 10px;
+                ">
+                    <h2>⏰ Loading Timeout</h2>
+                    <p>The 3D renderer is taking longer than expected to load. Please try refreshing the page.</p>
+                    <button onclick="location.reload()" style="
+                        background: #3498db;
+                        color: white;
+                        border: none;
+                        padding: 10px 20px;
+                        border-radius: 5px;
+                        cursor: pointer;
+                        margin-top: 10px;
+                    ">Refresh Page</button>
+                </div>
+            `;
+        }
+    }, 10000); // 10 second timeout
+    
+    try {
+        window.simulator3D = new NetworkFirewall3DSimulator();
+        clearTimeout(loadingTimeout); // Clear timeout if successful
+    } catch (error) {
+        console.error('Failed to create 3D simulator:', error);
+        clearTimeout(loadingTimeout);
+        if (loadingOverlay) {
+            loadingOverlay.style.display = 'none';
+        }
     }
 });
-
-// ================= Model Selector Hook =================
-
-// On page load, show the default model
-buildCentralizedModel();
-
-// On model selector change, load the selected model
-document.getElementById('modelSelect').addEventListener('change', (e) => {
-    const model = e.target.value;
-    if (model === 'centralized') buildCentralizedModel();
-    else if (model === 'decentralized') buildDecentralizedModel();
-    else if (model === 'combined') buildCombinedModel();
-    else if (model === 'north-south-ingress') buildNorthSouthIngressModel();
-    else if (model === 'centralized-dedicated') buildCentralizedDedicatedModel();
-    // Add more models as you implement them
-});
-
-// ================= Animation Loop =================
-function animate() {
-    requestAnimationFrame(animate);
-    if (controls) controls.update();
-    renderer.render(scene, camera);
-}
-animate();
