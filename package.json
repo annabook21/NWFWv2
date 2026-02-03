@@ -18,7 +18,7 @@
     "electron-builder": "^24.6.4"
   },
   "dependencies": {
-    "fabric": "^5.3.0"
+    "fabric": "^6.0.0"
   },
   "build": {
     "appId": "com.annabook21.network-firewall-simulator",
